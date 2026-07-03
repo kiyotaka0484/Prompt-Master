@@ -1,4 +1,10 @@
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import {
+  AIProviderError,
+  getModel,
+  getProviderErrorMessage,
+  isAIProviderError,
+  validateApiKey,
+} from "@/lib/ai-provider";
 import {
   EXPERTS,
   TRIAGE_PROMPT,
@@ -60,14 +66,16 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
-        const key = process.env.LOVABLE_API_KEY;
-        if (!key) {
-          return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        // Validate API key before proceeding
+        const keyValidation = validateApiKey();
+        if (!keyValidation.valid && keyValidation.error) {
+          return new Response(getProviderErrorMessage(keyValidation.error), {
+            status: 500,
+          });
         }
 
         try {
-          const gateway = createLovableAiGatewayProvider(key);
-          const model = gateway("google/gemini-3-flash-preview");
+          const model = getModel();
           const result = streamText({
             model,
             system: systemPrompt,
@@ -78,16 +86,33 @@ export const Route = createFileRoute("/api/chat")({
             originalMessages: messages as UIMessage[],
           });
         } catch (err) {
+          // Handle provider-specific errors
+          if (isAIProviderError(err)) {
+            return new Response(getProviderErrorMessage(err), { status: 500 });
+          }
+
+          // Handle API SDK errors
           const status =
             err && typeof err === "object" && "statusCode" in err
               ? (err as { statusCode: number }).statusCode
               : 500;
-          const message =
-            status === 429
-              ? "Rate limit hit — please wait a moment and try again."
-              : status === 402
-                ? "AI credits exhausted for this workspace. Please add credits in your Lovable workspace billing settings."
-                : "Something went wrong generating a response.";
+
+          let message: string;
+          if (status === 429) {
+            message = "Rate limit hit — please wait a moment and try again.";
+          } else if (status === 401 || status === 403) {
+            message =
+              "API authentication failed. Please check your API key configuration.";
+          } else if (status === 502 || status === 503 || status === 504) {
+            message =
+              "The AI service is temporarily unavailable. Please try again in a moment.";
+          } else if (err instanceof TypeError) {
+            message =
+              "Network error — please check your connection and try again.";
+          } else {
+            message = "Something went wrong generating a response.";
+          }
+
           return new Response(message, { status });
         }
       },

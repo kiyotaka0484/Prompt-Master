@@ -10,7 +10,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -40,7 +39,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    // Log error for debugging - could be sent to error tracking service
+    console.error("Root error boundary caught:", error);
   }, [error]);
 
   return (
@@ -81,37 +81,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "Lovable App" },
+        { title: "Prompt Master" },
         {
           name: "description",
           content:
-            "Prompt Mentor is an AI web app that guides users to craft effective prompts for AI tools.",
+            "Prompt Master is an AI web app that guides users to craft effective prompts for AI tools.",
         },
-        { name: "author", content: "Lovable" },
-        { property: "og:title", content: "Lovable App" },
+        { name: "author", content: "Prompt Master" },
+        { property: "og:title", content: "Prompt Master" },
         {
           property: "og:description",
           content:
-            "Prompt Mentor is an AI web app that guides users to craft effective prompts for AI tools.",
+            "Prompt Master is an AI web app that guides users to craft effective prompts for AI tools.",
         },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },
-        { name: "twitter:site", content: "@Lovable" },
-        { name: "twitter:title", content: "Lovable App" },
+        { name: "twitter:title", content: "Prompt Master" },
         {
           name: "twitter:description",
           content:
-            "Prompt Mentor is an AI web app that guides users to craft effective prompts for AI tools.",
-        },
-        {
-          property: "og:image",
-          content:
-            "https://storage.googleapis.com/gpt-engineer-file-uploads/xbd954DdjIYhsi8wcemEprYVkxp2/social-images/social-1781692108217-459940328_1054708693330756_6317538103706737181_n.webp",
-        },
-        {
-          name: "twitter:image",
-          content:
-            "https://storage.googleapis.com/gpt-engineer-file-uploads/xbd954DdjIYhsi8wcemEprYVkxp2/social-images/social-1781692108217-459940328_1054708693330756_6317538103706737181_n.webp",
+            "Prompt Master is an AI web app that guides users to craft effective prompts for AI tools.",
         },
       ],
       links: [
