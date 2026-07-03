@@ -1,0 +1,329 @@
+<div align="center">
+
+## 🌐 Live Demo
+
+Coming Soon
+
+
+# 🧠 Prompt Master
+
+### *The AI that asks the questions you forgot to ask.*
+
+Bridging human thinking and AI understanding.
+
+---
+
+![Version](https://img.shields.io/badge/version-0.1.0--alpha-purple)
+![Status](https://img.shields.io/badge/status-Active-success)
+![Built With](https://img.shields.io/badge/Built%20With-React%20%7C%20TypeScript%20%7C%20TanStack-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+</div>
+
+---
+
+# 📖 About
+
+Prompt Master is an AI-powered interview platform that helps users create world-class prompts for modern AI models.
+
+Instead of asking users to write prompts directly, Prompt Master acts like a professional consultant. It interviews the user, understands their goals, identifies missing information, and generates high-quality prompts optimized for AI systems.
+
+Our mission is simple:
+
+> **Our mission is to bridge human thinking and AI understanding by helping anyone—from complete beginners to professionals—master AI communication through intelligent conversations.**
+
+---
+
+# 🚀 Vision
+
+Prompt Master is not just a prompt generator.
+
+It is an **AI Understanding Engine**.
+
+Our long-term vision is to become the bridge between humans and AI by helping users:
+
+- Think clearly
+- Organize ideas
+- Discover missing information
+- Learn prompt engineering naturally
+- Choose the best AI for every task
+
+---
+
+# ❓ Why Prompt Master?
+
+Most people know what they want AI to do but struggle to explain it.
+
+Prompt Master reverses the process.
+
+Instead of forcing users to engineer prompts themselves, it interviews them like an experienced consultant.
+
+By asking intelligent follow-up questions, identifying missing information, and challenging assumptions, Prompt Master produces prompts that are significantly more complete and useful than manually written prompts.
+
+---
+
+# 🧠 Philosophy
+
+Prompt Master is built around one belief:
+
+> Great prompts are not written.
+>
+> Great prompts are discovered through conversation.
+
+Instead of replacing human thinking, Prompt Master helps users organize, refine, and communicate their ideas more effectively.
+
+---
+
+# ✨ Features
+
+## 🧠 Interview Mode
+
+Instead of asking users to write prompts manually, Prompt Master interviews them naturally.
+
+---
+
+## 🎯 Dynamic Question Planning
+
+Questions change depending on previous answers.
+
+No fixed questionnaire.
+
+Every interview is unique.
+
+---
+
+## 💡 Human Understanding Engine
+
+Prompt Master understands:
+
+- Typographical mistakes
+- Mixed Bangla + English
+- Slang
+- Short answers
+- Natural conversation
+
+---
+
+## 👋 Greeting Intelligence
+
+Different greetings receive different responses.
+
+Example:
+
+```
+Hi
+Hello
+Yo
+Wassup
+Assalamu Alaikum
+Help
+```
+
+Each greeting starts a different conversational flow.
+
+---
+
+## 🎓 Expert Consultants
+
+Prompt Master automatically switches between specialized consultants.
+
+Current consultants:
+
+- Business Consultant
+- Website/App Consultant
+- Study Consultant
+- Content Creator Consultant
+
+More experts coming soon.
+
+---
+
+## 📊 Prompt Quality Score
+
+Every generated prompt is evaluated for quality.
+
+Prompt Master estimates how complete and effective the prompt is before presenting it.
+
+---
+
+## 🧩 Missing Information Tracker
+
+The AI keeps track of missing details required to produce the best possible prompt.
+
+---
+
+## 🔒 Goal Lock System
+
+Prompt Master remembers the user's original goal and prevents accidental topic switching.
+
+---
+
+## 🤔 Curiosity Engine
+
+The AI asks meaningful follow-up questions whenever something interesting appears.
+
+Conversations feel natural instead of robotic.
+
+---
+
+## 🛡 Assumption Challenge Engine
+
+Prompt Master politely challenges unrealistic assumptions before generating a prompt.
+
+Example:
+
+> "Building a Facebook competitor in one week may not be realistic."
+
+---
+
+## 🌐 Multi-language Support
+
+Supports natural conversations in:
+
+- English
+- Bangla
+- Mixed Bangla-English
+
+---
+
+# 🏗 Architecture
+
+```
+User
+
+↓
+
+Greeting Intelligence
+
+↓
+
+Intent Detection
+
+↓
+
+Expert Selection
+
+↓
+
+Human Understanding Engine
+
+↓
+
+Dynamic Interview Planner
+
+↓
+
+Consultant Memory
+
+↓
+
+Missing Information Analysis
+
+↓
+
+Prompt Quality Evaluation
+
+↓
+
+Final Prompt Generation
+```
+
+---
+
+# 🛠 Tech Stack
+
+Frontend
+
+- React
+- TypeScript
+- TanStack Start
+- Tailwind CSS
+- Vite
+
+AI
+
+- Google Gemini API *(currently migrating)*
+- Extensible AI Provider Layer
+
+Development
+
+- Bolt.new
+- VS Code
+- GitHub
+- npm
+
+---
+
+# 📅 Roadmap
+
+## Version 1
+
+- [x] Interview Mode
+- [x] Greeting Intelligence
+- [x] Human Understanding Engine
+- [x] Dynamic Question Planner
+- [x] Prompt Quality Score
+- [x] Goal Lock
+- [x] Curiosity Engine
+- [x] Self Correction
+- [ ] AI Recommendation Engine
+
+---
+
+## Version 2
+
+- Universal Prompt Compiler
+- AI Model Recommendations
+- Long-term Memory
+- Prompt Learning Mode
+- Prompt Evolution
+
+---
+
+## Version 3
+
+- Team Collaboration
+- Prompt Marketplace
+- AI Workflow Builder
+- Custom Expert Packs
+- Enterprise Support
+
+---
+
+# 📸 Screenshots
+
+Coming Soon
+
+---
+
+# 🤝 Contributing
+
+Contributions, suggestions, and feedback are always welcome.
+
+Feel free to open an Issue or submit a Pull Request.
+
+---
+
+# 📜 License
+
+This project is licensed under the MIT License.
+
+---
+
+# 👨‍💻 Author
+
+**Md. Naziur Rahman**
+
+North South University (NSU)
+
+Computer Science & Engineering
+
+---
+
+<div align="center">
+
+## ⭐ If you like Prompt Master, consider giving this repository a star!
+
+Building the future of human–AI communication.
+
+</div>
