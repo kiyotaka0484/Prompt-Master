@@ -1,9 +1,6 @@
-import { createOpenAI } from "@ai-sdk/openai";
-
-export type AIProviderType = "openai" | "anthropic" | "google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 
 export interface AIProviderConfig {
-  provider: AIProviderType;
   model: string;
   apiKey?: string;
 }
@@ -34,7 +31,7 @@ export function isAIProviderError(error: unknown): error is AIProviderError {
 export function getProviderErrorMessage(error: AIProviderError): string {
   switch (error.code) {
     case "missing_api_key":
-      return "AI service is not configured. Please add an API key to your environment.";
+      return "AI service is not configured. Please add a Google AI API key to your environment.";
     case "rate_limit":
       return "Rate limit hit — please wait a moment and try again.";
     case "network_error":
@@ -46,67 +43,42 @@ export function getProviderErrorMessage(error: AIProviderError): string {
   }
 }
 
-// Default models for each provider
-const PROVIDER_MODELS: Record<AIProviderType, string> = {
-  openai: "gpt-4.1",
-  anthropic: "claude-sonnet-4-20250514",
-  google: "gemini-2.5-pro-preview-06-05",
-};
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
-let cachedModel: ReturnType<ReturnType<typeof createOpenAI>> | null = null;
+let cachedModel: ReturnType<ReturnType<typeof createGoogleGenerativeAI>> | null = null;
 
 export function getModel(config?: Partial<AIProviderConfig>) {
-  const provider = config?.provider ?? "openai";
-  const modelId = config?.model ?? PROVIDER_MODELS[provider];
-  const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
+  const modelId = config?.model ?? DEFAULT_MODEL;
+  const apiKey = config?.apiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
   if (!apiKey) {
     throw createAIProviderError(
       "missing_api_key",
-      "OPENAI_API_KEY is not configured",
+      "GOOGLE_GENERATIVE_AI_API_KEY is not configured",
     );
   }
 
-  switch (provider) {
-    case "openai": {
-      if (cachedModel && !config) {
-        return cachedModel;
-      }
-      const openai = createOpenAI({ apiKey });
-      const model = openai(modelId);
-      if (!config) {
-        cachedModel = model;
-      }
-      return model;
-    }
-    case "anthropic":
-      throw createAIProviderError(
-        "missing_api_key",
-        "Anthropic provider is not yet configured. Please use OpenAI for now.",
-      );
-    case "google":
-      throw createAIProviderError(
-        "missing_api_key",
-        "Google provider is not yet configured. Please use OpenAI for now.",
-      );
-    default:
-      throw createAIProviderError(
-        "unknown",
-        `Unknown provider: ${provider}`,
-      );
+  if (cachedModel && !config) {
+    return cachedModel;
   }
+  const google = createGoogleGenerativeAI({ apiKey });
+  const model = google(modelId);
+  if (!config) {
+    cachedModel = model;
+  }
+  return model;
 }
 
-export const DEFAULT_MODEL = PROVIDER_MODELS.openai;
+export { DEFAULT_MODEL };
 
 export function validateApiKey(): { valid: boolean; error?: AIProviderError } {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {
     return {
       valid: false,
       error: createAIProviderError(
         "missing_api_key",
-        "OPENAI_API_KEY is not set in environment variables",
+        "GOOGLE_GENERATIVE_AI_API_KEY is not set in environment variables",
       ),
     };
   }
