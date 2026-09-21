@@ -41,7 +41,14 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
-import { CornerDownLeft as CornerDownLeftIcon, Image as ImageIcon, Monitor, Plus as PlusIcon, Square as SquareIcon, Bone as XIcon } from "lucide-react";
+import {
+  CornerDownLeft as CornerDownLeftIcon,
+  Image as ImageIcon,
+  Monitor,
+  Plus as PlusIcon,
+  Square as SquareIcon,
+  Bone as XIcon,
+} from "lucide-react";
 import { nanoid } from "nanoid";
 import type {
   ChangeEvent,
