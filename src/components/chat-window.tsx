@@ -391,11 +391,10 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   // Readiness gate — allows generation when intelligence analysis or satisfied slots indicate readiness
   const ready =
     expertSlots.length > 0 &&
-    (understanding >= 75 ||
-      (intelligenceAnalysis?.isReadyForMasterPrompt ?? false)) &&
-    missingCritical.length === 0 &&
-    satisfiedSlotIds.size >= 4;
-  const showFinalPrompt = hasFinalPrompt && ready;
+    ((intelligenceAnalysis?.isReadyForMasterPrompt ?? false) ||
+      (understanding >= 70 && missingCritical.length === 0) ||
+      (satisfiedSlotIds.size >= 4 && missingCritical.length === 0));
+  const showFinalPrompt = hasFinalPrompt && (ready || understanding >= 60);
 
   // Prompt Quality Score (0-10): completeness (4) + critical coverage (4) + specificity (2).
   const quality = (() => {

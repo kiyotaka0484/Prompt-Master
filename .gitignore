@@ -1,2 +1,10 @@
 node_modules/
+dist/
+dist-ssr/
+.output/
+.tanstack/**
+.nitro/
 .env
+.env.local
+*.log
+.DS_Store

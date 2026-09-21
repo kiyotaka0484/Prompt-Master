@@ -1,6 +1,6 @@
 {
   "name": "Prompt Master",
-  "description": "AI prompt engineering SaaS platform with Google and GitHub authentication, cloud synchronization, interview history, multi-model prompt generation, and prompt library.",
+  "description": "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

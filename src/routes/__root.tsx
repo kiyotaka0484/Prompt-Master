@@ -119,21 +119,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "Prompt Master — AI Prompt Engineering Studio" },
+        {
+          title:
+            "Prompt Master — Adaptive AI Interviewer & Prompt Engineering Studio",
+        },
         {
           name: "description",
           content:
-            "Prompt Master acts as your personal AI consultant. Through a structured Socratic interview, it crafts certified master prompts natively tuned for Claude, ChatGPT, and Gemini.",
+            "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
         },
         { name: "author", content: "Prompt Master" },
         {
           property: "og:title",
-          content: "Prompt Master — AI Prompt Engineering Studio",
+          content:
+            "Prompt Master — Adaptive AI Interviewer & Prompt Engineering Studio",
         },
         {
           property: "og:description",
           content:
-            "Prompt Master acts as your personal AI consultant. Through a structured Socratic interview, it crafts certified master prompts natively tuned for Claude, ChatGPT, and Gemini.",
+            "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
         },
         { property: "og:type", content: "website" },
         { property: "og:site_name", content: "Prompt Master" },

@@ -126,15 +126,32 @@ export function inferInformation(
     clean.includes("react") ||
     clean.includes("next js") ||
     clean.includes("nextjs") ||
+    clean.includes("vue") ||
+    clean.includes("svelte") ||
+    clean.includes("angular") ||
+    clean.includes("remix") ||
     clean.includes("python") ||
     clean.includes("typescript") ||
     clean.includes("javascript") ||
     clean.includes("tailwind") ||
     clean.includes("node") ||
+    clean.includes("express") ||
+    clean.includes("fastapi") ||
+    clean.includes("django") ||
+    clean.includes("flask") ||
+    clean.includes("rails") ||
+    clean.includes("golang") ||
+    clean.includes("rust") ||
+    clean.includes("flutter") ||
+    clean.includes("swift") ||
     clean.includes("docker") ||
+    clean.includes("kubernetes") ||
     clean.includes("api") ||
     clean.includes("github") ||
     clean.includes("sql") ||
+    clean.includes("postgres") ||
+    clean.includes("supabase") ||
+    clean.includes("firebase") ||
     clean.includes("developer") ||
     clean.includes("programmer") ||
     clean.includes("software engineer") ||
@@ -153,10 +170,16 @@ export function inferInformation(
     clean.includes("nocode") ||
     clean.includes("zero coding") ||
     clean.includes("can t code") ||
+    clean.includes("cant code") ||
     clean.includes("non technical") ||
     clean.includes("framer") ||
     clean.includes("webflow") ||
     clean.includes("wix") ||
+    clean.includes("squarespace") ||
+    clean.includes("wordpress") ||
+    clean.includes("bubble") ||
+    clean.includes("airtable") ||
+    clean.includes("notion") ||
     clean.includes("shopify")
   ) {
     add({
@@ -174,7 +197,8 @@ export function inferInformation(
   if (
     clean.includes("freelance") ||
     clean.includes("freelancers") ||
-    clean.includes("agency owners")
+    clean.includes("agency owners") ||
+    clean.includes("consultants")
   ) {
     add({
       id: "target_audience",
@@ -188,6 +212,7 @@ export function inferInformation(
     clean.includes("valorant") ||
     clean.includes("esports") ||
     clean.includes("gaming team") ||
+    clean.includes("gamers") ||
     clean.includes("scouts")
   ) {
     add({
@@ -201,7 +226,8 @@ export function inferInformation(
   } else if (
     clean.includes("students") ||
     clean.includes("university") ||
-    clean.includes("college")
+    clean.includes("college") ||
+    clean.includes("high school")
   ) {
     add({
       id: "target_audience",
@@ -215,7 +241,8 @@ export function inferInformation(
     clean.includes("b2b") ||
     clean.includes("enterprise") ||
     clean.includes("small business") ||
-    clean.includes("local businesses")
+    clean.includes("local businesses") ||
+    clean.includes("corporate")
   ) {
     add({
       id: "target_audience",
@@ -225,13 +252,27 @@ export function inferInformation(
       rationale: "Identified commercial enterprise focus",
       category: "audience",
     });
+  } else if (
+    clean.includes("creators") ||
+    clean.includes("youtubers") ||
+    clean.includes("streamers")
+  ) {
+    add({
+      id: "target_audience",
+      label: "Target Audience",
+      value: "Online Content Creators, YouTubers & Media Producers",
+      confidence: "high",
+      rationale: "Targeting digital content creators",
+      category: "audience",
+    });
   }
 
   // 3. Product / Website Format
   if (
     clean.includes("portfolio") ||
     clean.includes("showcase my work") ||
-    clean.includes("personal site")
+    clean.includes("personal site") ||
+    clean.includes("resume site")
   ) {
     add({
       id: "site_type",
@@ -245,7 +286,8 @@ export function inferInformation(
     clean.includes("saas") ||
     clean.includes("micro saas") ||
     clean.includes("web app") ||
-    clean.includes("software product")
+    clean.includes("software product") ||
+    clean.includes("subscription tool")
   ) {
     add({
       id: "site_type",
@@ -269,6 +311,32 @@ export function inferInformation(
       confidence: "high",
       rationale: "Identified retail commerce intent",
       category: "business",
+    });
+  } else if (
+    clean.includes("directory") ||
+    clean.includes("listing site") ||
+    clean.includes("curated list")
+  ) {
+    add({
+      id: "site_type",
+      label: "Site Archetype",
+      value: "Curated Directory / Aggregator Platform",
+      confidence: "high",
+      rationale: "Directory / curation intent detected",
+      category: "scope",
+    });
+  } else if (
+    clean.includes("newsletter") ||
+    clean.includes("substack") ||
+    clean.includes("publication")
+  ) {
+    add({
+      id: "site_type",
+      label: "Publication Format",
+      value: "Digital Newsletter / Media Publication",
+      confidence: "high",
+      rationale: "Newsletter / publication model detected",
+      category: "scope",
     });
   }
 
@@ -383,38 +451,95 @@ export function detectVagueness(lastUserAnswer: string): {
   const t = lastUserAnswer.trim().toLowerCase();
   const words = t.split(/\s+/).filter(Boolean);
 
-  if (words.length <= 2 && words.every((w) => VAGUE_WORDS.has(w))) {
+  // Vague multi-word patterns
+  const isVaguePhrase =
+    t === "make money" ||
+    t === "make money fast" ||
+    t === "i want to make money" ||
+    t === "make lots of money" ||
+    t === "passive income" ||
+    t === "build a good website" ||
+    t === "a website for everyone" ||
+    t === "everyone" ||
+    t === "anyone" ||
+    t === "good" ||
+    t === "nice" ||
+    t === "cool" ||
+    t === "standard" ||
+    t === "normal" ||
+    t === "idk" ||
+    t === "i don't know" ||
+    t === "not sure" ||
+    t === "whatever works" ||
+    t === "as fast as possible" ||
+    t === "grow fast" ||
+    t === "get views" ||
+    t === "learn coding" ||
+    t.startsWith("make it look good") ||
+    t.startsWith("standard website") ||
+    t.startsWith("make money online");
+
+  const isShortVague =
+    words.length <= 2 && words.every((w) => VAGUE_WORDS.has(w));
+
+  if (isShortVague || isVaguePhrase) {
     let anchors = [
       "A specific measurable metric",
       "A tangible real-world example",
-      "Your top 1 priority",
+      "Your top 1 non-negotiable priority",
     ];
-    if (t.includes("money") || t.includes("cash") || t.includes("profit")) {
+
+    if (
+      t.includes("money") ||
+      t.includes("cash") ||
+      t.includes("profit") ||
+      t.includes("income")
+    ) {
       anchors = [
-        "Recurring software subscriptions (SaaS)",
-        "One-time project consulting or freelance fee",
-        "E-commerce physical / digital sales",
+        "Recurring software subscription ($29-$99/mo B2B SaaS)",
+        "High-ticket client consulting / freelance service ($1,000-$3,000/project)",
+        "Direct-to-consumer e-commerce or digital asset downloads",
+        "Affiliate commission or sponsored newsletter audience",
       ];
-    } else if (t.includes("good") || t.includes("best") || t.includes("nice")) {
+    } else if (
+      t.includes("good") ||
+      t.includes("best") ||
+      t.includes("nice") ||
+      t.includes("clean") ||
+      t.includes("modern")
+    ) {
       anchors = [
-        "High-conversion minimal landing layout",
-        "Data-dense developer dashboard",
-        "Bold, immersive visual showcase",
+        "High-conversion minimal layout with bold typography",
+        "Data-dense technical dashboard with live filters",
+        "Immersive editorial portfolio with fluid interactive transitions",
       ];
     } else if (
       t.includes("everyone") ||
       t.includes("anyone") ||
-      t.includes("people")
+      t.includes("people") ||
+      t.includes("all users")
     ) {
       anchors = [
-        "Specific professionals (e.g. freelance designers, CPAs)",
-        "Passionate hobbyists / niche enthusiasts",
-        "Early adopters and indie builders",
+        "Specific independent professionals (e.g. freelance designers, copywriters)",
+        "High-intent niche enthusiasts (e.g. competitive FPS players, indie game devs)",
+        "Small business operators (e.g. local clinic directors, boutique fitness studios)",
+      ];
+    } else if (
+      t.includes("fast") ||
+      t.includes("asap") ||
+      t.includes("soon") ||
+      t.includes("quick")
+    ) {
+      anchors = [
+        "Ultra-lean 48-hour prototype with 1 core feature",
+        "2-week validated MVP ready for first 10 beta testers",
+        "1-month production sprint with complete onboarding flow",
       ];
     }
+
     return {
       isVague: true,
-      feedback: `The answer "${lastUserAnswer}" is broad. An experienced consultant should provide concrete real-world anchors to help them choose.`,
+      feedback: `The answer "${lastUserAnswer}" is broad or open-ended. As an experienced consultant, anchor their thinking with 2-4 tangible options.`,
       concreteAnchors: anchors,
     };
   }
@@ -435,14 +560,16 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("$0") ||
     combined.includes("zero budget") ||
     combined.includes("no money") ||
-    combined.includes("shoestring");
+    combined.includes("shoestring") ||
+    combined.includes("no budget");
   const claimsPaidGrowth =
     combined.includes("hire an agency") ||
     combined.includes("facebook ads") ||
     combined.includes("google ads") ||
     combined.includes("run paid ads") ||
     combined.includes("influencer sponsorship") ||
-    combined.includes("hire developers");
+    combined.includes("hire developers") ||
+    combined.includes("hire a team");
 
   if (claimsZeroBudget && claimsPaidGrowth) {
     return {
@@ -450,9 +577,9 @@ export function detectContradictions(allUserAnswers: string[]): {
         type: "contradiction_detected",
         title: "Budget vs Acquisition Contradiction",
         description:
-          "User indicated a $0/shoestring budget but mentioned paid ads or hiring external agencies.",
+          "User indicated a $0/shoestring budget but proposed capital-intensive customer acquisition like paid ads or hiring external agencies.",
         recommendation:
-          "Diplomatically surface the tension: propose organic, zero-cost launch playbooks (content, communities, cold outreach) instead of capital-heavy ads.",
+          "Diplomatically surface the tension: propose organic, zero-cost launch playbooks (niche communities, founder-led content, cold outbound) instead of capital-heavy ads.",
         severity: "warning",
       },
     };
@@ -463,13 +590,16 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("2 hours") ||
     combined.includes("couple hours") ||
     combined.includes("very little time") ||
-    combined.includes("1 hour a day");
+    combined.includes("1 hour a day") ||
+    combined.includes("30 minutes");
   const claimsMassiveScope =
     combined.includes("mmo") ||
     combined.includes("social network like facebook") ||
+    combined.includes("social network like tiktok") ||
     combined.includes("full operating system") ||
     combined.includes("marketplace like amazon") ||
-    combined.includes("custom neural network");
+    combined.includes("custom neural network") ||
+    combined.includes("streaming platform");
 
   if (claimsTinyTime && claimsMassiveScope) {
     return {
@@ -489,12 +619,14 @@ export function detectContradictions(allUserAnswers: string[]): {
   const claimsNonTech =
     combined.includes("no coding") ||
     combined.includes("can't code") ||
+    combined.includes("cant code") ||
     combined.includes("complete beginner") ||
     combined.includes("never programmed");
   const claimsLowLevel =
     combined.includes("build in c++") ||
     combined.includes("custom blockchain") ||
-    combined.includes("write an engine");
+    combined.includes("write an engine") ||
+    combined.includes("from scratch in assembly");
 
   if (claimsNonTech && claimsLowLevel) {
     return {
@@ -505,6 +637,55 @@ export function detectContradictions(allUserAnswers: string[]): {
           "User is a complete beginner but plans low-level systems engineering.",
         recommendation:
           "Guide toward modern AI-assisted no-code/low-code boilerplates or high-level frameworks.",
+        severity: "warning",
+      },
+    };
+  }
+
+  // Contradiction 4: High-ticket pricing vs penniless audience
+  const claimsBrokeAudience =
+    combined.includes("broke students") ||
+    combined.includes("unemployed teenagers") ||
+    combined.includes("kids with no money");
+  const claimsHighTicket =
+    combined.includes("$1000") ||
+    combined.includes("$2000") ||
+    combined.includes("$500/month") ||
+    combined.includes("high ticket");
+
+  if (claimsBrokeAudience && claimsHighTicket) {
+    return {
+      contradiction: {
+        type: "contradiction_detected",
+        title: "Pricing vs Audience Purchasing Power Mismatch",
+        description:
+          "User wants to charge premium high-ticket prices to an audience with little to no disposable income.",
+        recommendation:
+          "Surface the purchasing power gap: suggest either pivoting to institutional/parent buyers or adopting a low-cost freemium / micro-tier model.",
+        severity: "warning",
+      },
+    };
+  }
+
+  // Contradiction 5: Universal "everyone" audience vs hyper-specialized product
+  const claimsEveryone =
+    combined.includes("for everyone") ||
+    combined.includes("every single person");
+  const claimsNicheProduct =
+    combined.includes("valorant") ||
+    combined.includes("dentist invoice") ||
+    combined.includes("cpa tax calculator") ||
+    combined.includes("real estate crm");
+
+  if (claimsEveryone && claimsNicheProduct) {
+    return {
+      contradiction: {
+        type: "contradiction_detected",
+        title: "Audience Scope Contradiction",
+        description:
+          "User claims the product is for 'everyone' while building a tool specifically designed for a specialized vertical.",
+        recommendation:
+          "Help them embrace the niche: niche positioning drives 5x higher conversion than pretending to serve everyone.",
         severity: "warning",
       },
     };
@@ -529,7 +710,8 @@ export function detectUnrealisticExpectations(
       combined.includes("50k")) &&
     (combined.includes("first week") ||
       combined.includes("in a few days") ||
-      combined.includes("overnight"))
+      combined.includes("overnight") ||
+      combined.includes("tomorrow"))
   ) {
     return {
       unrealistic: {
@@ -570,7 +752,8 @@ export function detectUnrealisticExpectations(
   if (
     combined.includes("learn all of computer science in 3 days") ||
     combined.includes("master python in 2 days") ||
-    combined.includes("fluent in 1 week")
+    combined.includes("fluent in 1 week") ||
+    combined.includes("expert full stack in a weekend")
   ) {
     return {
       unrealistic: {
@@ -579,6 +762,26 @@ export function detectUnrealisticExpectations(
         description: "Attempting to master an entire discipline in days.",
         recommendation:
           "Pivot to an 80/20 project-based sprint: focus on building one working application rather than memorizing theory.",
+        severity: "advisory",
+      },
+    };
+  }
+
+  // 100% passive hands-off myth
+  if (
+    combined.includes("100% passive with zero work") ||
+    combined.includes(
+      "completely automated money while i sleep with no maintenance",
+    )
+  ) {
+    return {
+      unrealistic: {
+        type: "unrealistic_expectation",
+        title: "Pure Passive Income Illusion",
+        description:
+          "Expecting automated passive income from day 1 without upfront system building, marketing distribution, or customer support.",
+        recommendation:
+          "Ground in operational reality: every scalable asset requires an upfront build sprint before any automated leverage takes over.",
         severity: "advisory",
       },
     };
@@ -597,10 +800,12 @@ export function detectKnowledgeGaps(
 ): { knowledgeGap?: IntelligenceSignal } {
   const combined = [goal, ...allUserAnswers].join(" ").toLowerCase();
 
-  // E-commerce blind spot: Payment & shipping
+  // E-commerce blind spot: Payment, shipping & logistics
   if (
     (combined.includes("sell physical products") ||
-      combined.includes("store")) &&
+      combined.includes("store") ||
+      combined.includes("ecommerce") ||
+      combined.includes("e commerce")) &&
     !combined.includes("stripe") &&
     !combined.includes("shipping") &&
     !combined.includes("supplier")
@@ -610,28 +815,31 @@ export function detectKnowledgeGaps(
         type: "knowledge_gap",
         title: "E-Commerce Fulfillment & Payment Blind Spot",
         description:
-          "User is planning a store but hasn't accounted for payment gateways or fulfillment.",
+          "User is planning a store but hasn't accounted for payment gateways (processing fees, payout holds) or fulfillment logistics.",
         recommendation:
-          "Weave in a quick consultant insight about Stripe/Shopify logistics before asking the next question.",
+          "Weave in a quick consultant insight about payment processing and fulfillment logistics before asking the next question.",
         severity: "info",
       },
     };
   }
 
-  // YouTube / Content blind spot: Thumbnails & First 5s Hook
+  // YouTube / Content blind spot: Thumbnails, Packaging & Hook Retention
   if (
-    (expertId === "creator" || combined.includes("youtube")) &&
+    (expertId === "creator" ||
+      combined.includes("youtube") ||
+      combined.includes("tiktok")) &&
     allUserAnswers.length >= 2 &&
     !combined.includes("hook") &&
     !combined.includes("thumbnail") &&
-    !combined.includes("ctr")
+    !combined.includes("ctr") &&
+    !combined.includes("packaging")
   ) {
     return {
       knowledgeGap: {
         type: "knowledge_gap",
         title: "Viewer Retention & Packaging Blind Spot",
         description:
-          "Creator is focused on topic ideas without considering packaging (titles/thumbnails) or hook retention.",
+          "Creator is focused on topic ideas without considering packaging (titles/thumbnails) or hook retention (first 10 seconds).",
         recommendation:
           "Consultant should guide attention toward packaging and the first 10 seconds of viewer retention.",
         severity: "info",
@@ -644,7 +852,7 @@ export function detectKnowledgeGaps(
     (expertId === "website" ||
       combined.includes("website") ||
       combined.includes("app")) &&
-    allUserAnswers.length >= 3 &&
+    allUserAnswers.length >= 2 &&
     !combined.includes("mobile") &&
     !combined.includes("deploy") &&
     !combined.includes("hosting")
@@ -657,6 +865,48 @@ export function detectKnowledgeGaps(
           "Project plan has not accounted for mobile viewport or launch deployment target.",
         recommendation:
           "Briefly factor in mobile-first considerations for the final master prompt.",
+        severity: "info",
+      },
+    };
+  }
+
+  // Startup / Business blind spot: Churn / Retention vs Acquisition
+  if (
+    (expertId === "business" || combined.includes("saas")) &&
+    allUserAnswers.length >= 2 &&
+    !combined.includes("churn") &&
+    !combined.includes("retention") &&
+    !combined.includes("cac")
+  ) {
+    return {
+      knowledgeGap: {
+        type: "knowledge_gap",
+        title: "Customer Retention & Unit Economics Blind Spot",
+        description:
+          "Startup founder is focused purely on getting users, without factoring in churn, retention loops, or acquisition costs.",
+        recommendation:
+          "Offer a concise consultant perspective on early retention before exploring feature depth.",
+        severity: "info",
+      },
+    };
+  }
+
+  // Study blind spot: Tutorial Hell vs Active Project Building
+  if (
+    expertId === "study" &&
+    allUserAnswers.length >= 2 &&
+    !combined.includes("project") &&
+    !combined.includes("build") &&
+    !combined.includes("practice")
+  ) {
+    return {
+      knowledgeGap: {
+        type: "knowledge_gap",
+        title: "Passive Study ('Tutorial Hell') Trap",
+        description:
+          "Learner plans to passively consume courses/videos rather than building real-world projects with active recall.",
+        recommendation:
+          "Coach them toward project-based milestones where each chapter yields a tangible artifact.",
         severity: "info",
       },
     };
@@ -869,36 +1119,41 @@ export function buildAdaptiveConsultantPrompt(
 # INTERVIEW INTELLIGENCE ENGINE (REAL-TIME ADAPTIVE CONSULTANT)
 # ====================================================================
 
-You are an experienced, high-caliber strategic consultant. You NEVER act like a generic form, an interrogation script, or a mechanical questionnaire.
+You are Prompt Master's Adaptive Interview Intelligence Engine.
+You behave like an experienced, top-tier strategic consultant — NEVER like a form, questionnaire, or interrogation script.
 
 LOCKED USER GOAL: "${analysis.goal || "(infer from first user message)"}"
 SPECIALTY DOMAIN: ${expert.name}
 CURRENT STRATEGIC FOCUS: ${analysis.strategicFocus}
 READINESS SCORE: ${analysis.readinessScore}% (Master Prompt Threshold: 80%+)
 
-## 1. INFORMATION ALREADY INFERRED BY INTELLIGENCE (DO NOT ASK REDUNDANT QUESTIONS!):
+## 1. MANDATORY INTERVIEW DIRECTIVES:
+• **NEVER USE FIXED QUESTIONS**: You must NEVER follow a pre-scripted list or sequence of questions. Every question must be dynamically generated on the fly.
+• **INFER MISSING INFORMATION**: Deduce as much context as possible from their goal and previous messages. Treat inferred facts as established truth.
+• **DYNAMIC FOLLOW-UP QUESTIONS**: Ask completely different questions depending on previous answers. Branch into whatever specifics, tools, constraints, or unique ideas the user introduces.
+• **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), do not reject them robotically. Provide 2-4 concrete, real-world anchors or options to help them decide.
+• **DETECT CONTRADICTIONS**: When you notice conflicting statements (e.g., $0 budget vs paid ads), diplomatically surface the tension with curiosity and guide them toward alignment.
+• **DETECT UNREALISTIC EXPECTATIONS**: When goals or timelines defy reality, validate their ambition while grounding the scope into an achievable Phase 1 MVP.
+• **DETECT KNOWLEDGE GAPS**: If a user overlooks a critical industry blind spot, share a crisp 1-sentence consultant insight before framing your next question.
+• **ASK CLARIFICATION QUESTIONS ONLY WHEN NECESSARY**: If an answer is clear enough to formulate a high-yield prompt, accept it and advance.
+• **NEVER ASK UNNECESSARY QUESTIONS**: Do not ask about topics that are already known, inferred, or irrelevant to the master prompt.
+• **OPTIMIZE FOR NATURAL CONVERSATION**: Speak in a warm, curious, and professional tone. Keep response quality exceptionally high.
+
+## 2. INFORMATION ALREADY INFERRED BY INTELLIGENCE (DO NOT ASK REDUNDANT QUESTIONS!):
 ${inferredList}
 
-## 2. INFORMATION CONFIRMED BY THE USER:
+## 3. INFORMATION CONFIRMED BY THE USER:
 ${confirmedList}
 
-## 3. STRICT NEGATIVE CONSTRAINTS (UNNECESSARY QUESTIONS):
+## 4. STRICT NEGATIVE CONSTRAINTS (UNNECESSARY TOPICS):
 ${unnecessaryList}
 - Never ask a question whose answer is already obvious from the user's goal or earlier answers.
 - Never ask two questions in the same message. Exactly ONE question per turn.
-- If the user already demonstrated they know how to code (e.g. mentions React, Python, Docker), NEVER ask "What are your coding skills?".
-- If the user already stated their target audience (e.g. "for freelance designers"), NEVER ask "Who is your audience?".
+- If the user already demonstrated they know how to code, NEVER ask "What are your coding skills?".
+- If the user already stated their target audience, NEVER ask "Who is your audience?".
 
-## 4. ACTIVE CONSULTANT SIGNALS & HEURISTICS:
+## 5. ACTIVE CONSULTANT SIGNALS & HEURISTICS:
 ${signalsSection}
-
-## 5. ADAPTIVE CONSULTANT DIRECTIVES FOR THIS TURN:
-- **Build directly on previous words**: Anchor your response in the specific words, numbers, or tools the user just mentioned.
-- **Vagueness handling**: If the user's latest response was broad or vague ("make money", "standard site", "good"), do not reject it mechanically. Validate the direction and offer 2-3 sharp, tangible real-world options to choose from.
-- **Contradiction handling**: If you detect conflicting statements (e.g. $0 budget vs paid ads), gently surface it with diplomatic curiosity: "You mentioned a $0 budget earlier, but paid ads require capital—should we design an organic, zero-ad acquisition engine instead?"
-- **Unrealistic expectations**: If the user's timeline or targets are unviable (e.g. building a full social network in 2 days solo), validate their ambition, then ground the scope in a high-impact Phase 1 MVP.
-- **Knowledge gaps**: If they miss a crucial industry factor (like payment gateway fees, mobile responsiveness, or thumbnail CTR), share a 1-sentence consultant insight before asking your question.
-- **Ask clarification questions ONLY when necessary**: If an answer is clear enough to formulate a high-yield prompt, accept it and advance.
 
 ## 6. REQUIRED OUTPUT STRUCTURE:
 1. Speak in a warm, razor-sharp, natural consultant voice (1-3 sentences acknowledging or contextualizing the last answer).
