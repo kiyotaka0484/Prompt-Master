@@ -6,6 +6,7 @@ export interface ThreadRecord {
   expert: ExpertId | null;
   title: string;
   updatedAt: number;
+  isFavorite?: boolean;
   messages: UIMessage[];
 }
 
@@ -73,4 +74,35 @@ export function deriveTitle(messages: UIMessage[]): string {
   const text = messageText(firstUser).trim();
   if (!text) return "New session";
   return text.length > 48 ? text.slice(0, 48) + "…" : text;
+}
+
+export function createFreshSession(options?: {
+  expert?: ExpertId | null;
+  goal?: string;
+}): ThreadRecord {
+  const id = newThreadId();
+  const goalText = options?.goal?.trim();
+  const thread: ThreadRecord = {
+    id,
+    expert: options?.expert ?? (goalText ? detectExpert(goalText) : null),
+    title: goalText
+      ? goalText.length > 48
+        ? goalText.slice(0, 48) + "…"
+        : goalText
+      : "New session",
+    updatedAt: Date.now(),
+    messages: goalText
+      ? [
+          {
+            id: newThreadId(),
+            role: "user",
+            parts: [{ type: "text", text: goalText }],
+          },
+        ]
+      : [],
+  };
+
+  const current = loadThreads();
+  saveThreads([thread, ...current]);
+  return thread;
 }

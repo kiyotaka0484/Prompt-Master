@@ -14,18 +14,36 @@ import {
   type Slot,
   type SlotPriority,
 } from "@/lib/experts";
+import {
+  analyzeInterview,
+  type InferredFact,
+  type IntelligenceSignal,
+} from "@/lib/interview-intelligence";
 import { messageText, type ThreadRecord } from "@/lib/threads";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Circle as HelpCircle, Sparkles, Target } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Circle as HelpCircle,
+  Layers,
+  Lightbulb,
+  MessageSquare,
+  Sparkles,
+  Target,
+  User,
+  Zap,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import logo from "@/assets/prompt-master-logo.png";
+import { cn } from "@/lib/utils";
 
 export interface SlotStatus {
   id: string;
   label: string;
   filled: boolean;
+  inferred?: boolean;
   value?: string;
   priority: SlotPriority;
   why: string;
@@ -41,7 +59,24 @@ interface Props {
     expert: ExpertId | null;
     slots: SlotStatus[];
     goal: string;
+    inferredFacts?: InferredFact[];
+    activeSignals?: IntelligenceSignal[];
+    strategicFocus?: string;
   }) => void;
+}
+
+function factMatchesSlot(factId: string, slotId: string): boolean {
+  const f = factId.toLowerCase();
+  const s = slotId.toLowerCase();
+  if (s === "skills" || s === "experience")
+    return f.includes("skills") || f.includes("technical");
+  if (s === "audience") return f.includes("audience");
+  if (s === "budget") return f.includes("budget");
+  if (s === "purpose" || s === "type")
+    return f.includes("site_type") || f.includes("scope");
+  if (s === "niche" || s === "format") return f.includes("format");
+  if (s === "timeline") return f.includes("timeline");
+  return false;
 }
 
 const VAGUE_ANSWER_RE =
@@ -256,6 +291,8 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const goalMessageIndex = goalEntry ? messages.indexOf(goalEntry.message) : -1;
   const isIntentDiscovery = !goal;
 
+  const [viewMode, setViewMode] = useState<"focus" | "stream">("focus");
+
   // Build Q→A pairs (skip any greeting/triage messages and the goal itself).
   const pairs: {
     question: string;
@@ -286,24 +323,60 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const expertConfig = currentExpertId ? EXPERTS[currentExpertId] : null;
   const expertSlots: Slot[] = expertConfig?.slots ?? [];
   const criticalSlotIds = expertConfig?.criticalSlots ?? [];
-  const filledSlotIds = new Set(
-    pairs.map((p) => p.slot).filter((s): s is string => Boolean(s)),
-  );
+
+  // Interview Intelligence Engine Analysis (Runs dynamically on client)
+  const intelligenceAnalysis = useMemo(() => {
+    if (!currentExpertId || goalMessageIndex < 0) return null;
+    return analyzeInterview(messages.slice(goalMessageIndex), currentExpertId);
+  }, [messages, goalMessageIndex, currentExpertId]);
+
+  const inferredFacts = intelligenceAnalysis?.inferredFacts ?? [];
+  const activeSignals = intelligenceAnalysis?.activeSignals ?? [];
+  const strategicFocus = intelligenceAnalysis?.strategicFocus ?? "";
+
+  // Evaluate slots: satisfied either by direct answer OR intelligent inference
   const slotStatuses: SlotStatus[] = expertSlots.map((s) => {
     const match = pairs.find((p) => p.slot === s.id);
+    if (match) {
+      return {
+        id: s.id,
+        label: s.label,
+        filled: true,
+        inferred: false,
+        value: match.answer,
+        priority: s.priority,
+        why: s.why,
+      };
+    }
+    const inferred = inferredFacts.find((f) => factMatchesSlot(f.id, s.id));
+    if (inferred) {
+      return {
+        id: s.id,
+        label: s.label,
+        filled: true,
+        inferred: true,
+        value: `${inferred.value} (Inferred)`,
+        priority: s.priority,
+        why: s.why,
+      };
+    }
     return {
       id: s.id,
       label: s.label,
-      filled: !!match,
-      value: match?.answer,
+      filled: false,
+      inferred: false,
       priority: s.priority,
       why: s.why,
     };
   });
 
-  const missingCritical = criticalSlotIds.filter(
-    (id) => !filledSlotIds.has(id),
+  const satisfiedSlotIds = new Set(
+    slotStatuses.filter((s) => s.filled).map((s) => s.id),
   );
+  const missingCritical = criticalSlotIds.filter(
+    (id) => !satisfiedSlotIds.has(id),
+  );
+
   const understanding = isIntentDiscovery
     ? 0
     : hasFinalPrompt
@@ -311,34 +384,35 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       : expertSlots.length > 0
         ? Math.min(
             95,
-            Math.round((filledSlotIds.size / expertSlots.length) * 100),
+            Math.round((satisfiedSlotIds.size / expertSlots.length) * 100),
           )
         : 0;
 
-  // Readiness gate — only allow the final prompt when we have enough.
+  // Readiness gate — allows generation when intelligence analysis or satisfied slots indicate readiness
   const ready =
     expertSlots.length > 0 &&
-    understanding >= 80 &&
+    (understanding >= 75 ||
+      (intelligenceAnalysis?.isReadyForMasterPrompt ?? false)) &&
     missingCritical.length === 0 &&
-    filledSlotIds.size >= 6;
+    satisfiedSlotIds.size >= 4;
   const showFinalPrompt = hasFinalPrompt && ready;
 
   // Prompt Quality Score (0-10): completeness (4) + critical coverage (4) + specificity (2).
   const quality = (() => {
     if (isIntentDiscovery || expertSlots.length === 0) return 0;
     if (hasFinalPrompt && ready) return 10;
-    const completeness = filledSlotIds.size / expertSlots.length; // 0..1
+    const completeness = satisfiedSlotIds.size / expertSlots.length; // 0..1
     const criticality =
       criticalSlotIds.length === 0
         ? 1
         : (criticalSlotIds.length - missingCritical.length) /
           criticalSlotIds.length;
     const filledPairs = pairs.filter(
-      (p) => p.slot && filledSlotIds.has(p.slot),
+      (p) => p.slot && satisfiedSlotIds.has(p.slot),
     );
     const specificity =
       filledPairs.length === 0
-        ? 0
+        ? 0.5
         : filledPairs.filter((p) => isSpecificAnswer(p.answer)).length /
           filledPairs.length;
     const raw = completeness * 4 + criticality * 4 + specificity * 2;
@@ -360,6 +434,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       collected: pairs.map((p) => `${p.question} — ${p.answer}`),
       slots: slotStatuses,
       goal,
+      inferredFacts,
+      activeSignals,
+      strategicFocus,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -369,6 +446,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
     thread.id,
     currentExpertId,
     goal,
+    inferredFacts.length,
+    activeSignals.length,
+    strategicFocus,
   ]);
 
   const isBusy = status === "submitted" || status === "streaming";
@@ -426,16 +506,30 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       <div className="relative flex h-full min-h-0 flex-col overflow-y-auto bg-background">
         <BackgroundGlow />
         <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-          <img src={logo} alt="" width={56} height={56} className="h-14 w-14" />
-          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            <Sparkles className="h-3 w-3" /> The AI that asks the questions you
-            forgot to ask
+          <div className="relative group mb-2">
+            <div className="absolute -inset-2 rounded-3xl bg-gradient-to-r from-primary via-fuchsia-500 to-violet-600 opacity-60 blur-md group-hover:opacity-90 transition-opacity duration-500" />
+            <div className="relative flex items-center justify-center rounded-2xl bg-card border border-primary/40 p-2 shadow-xl shadow-primary/25">
+              <img
+                src={logo}
+                alt="Prompt Master"
+                width={56}
+                height={56}
+                className="h-14 w-14 object-contain"
+              />
+            </div>
           </div>
-          <h1 className="mt-4 text-balance text-3xl font-semibold leading-tight sm:text-4xl">
-            What are you trying to <span className="text-primary">achieve</span>
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-[11px] uppercase tracking-[0.18em] text-primary">
+            <Sparkles className="h-3.5 w-3.5" /> The AI that asks the questions
+            you forgot to ask
+          </div>
+          <h1 className="mt-4 text-balance text-3xl font-extrabold tracking-tight sm:text-4xl">
+            What are you trying to{" "}
+            <span className="bg-gradient-to-r from-primary to-fuchsia-400 bg-clip-text text-transparent">
+              achieve
+            </span>
             ?
           </h1>
-          <p className="mt-3 max-w-lg text-balance text-sm text-muted-foreground">
+          <p className="mt-3 max-w-lg text-balance text-sm text-muted-foreground leading-relaxed">
             Drop your goal in one sentence. Prompt Master will interview you
             with smart follow-up questions, then hand you a master prompt for
             ChatGPT, Gemini, or Claude.
@@ -450,25 +544,27 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
               status={status}
               onSubmit={handleSend}
               textareaRef={textareaRef}
-              placeholder="e.g. I want to start a business…"
+              placeholder="e.g. I want to start a business, build an app, learn a skill…"
               big
             />
           </div>
 
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {[
-              "I want to start a business",
-              "I want to build a website",
-              "I want to learn Python",
-              "I want to start a YouTube channel",
+              { text: "I want to start a business", emoji: "💼" },
+              { text: "I want to build a website", emoji: "🧩" },
+              { text: "I want to learn Python", emoji: "📚" },
+              { text: "I want to start a YouTube channel", emoji: "🎬" },
             ].map((s) => (
               <button
-                key={s}
-                onClick={() => handleSend(s)}
+                key={s.text}
+                type="button"
+                onClick={() => handleSend(s.text)}
                 disabled={isBusy}
-                className="rounded-full border border-border/60 bg-card/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-card hover:text-foreground"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-xs text-muted-foreground transition-all duration-150 hover:border-primary/50 hover:bg-card hover:text-foreground cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
-                {s}
+                <span>{s.emoji}</span>
+                <span>{s.text}</span>
               </button>
             ))}
           </div>
@@ -488,10 +584,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
 
       {/* Status bar */}
       <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-background/70 px-5 py-3 backdrop-blur">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-primary">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />{" "}
             Interview Mode
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[10.5px] font-semibold tracking-wide text-violet-300">
+            <Zap className="h-3 w-3 text-amber-400" />
+            Interview Intelligence Active
           </span>
           {expert ? (
             <div className="flex items-center gap-2">
@@ -513,7 +613,37 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
           ) : null}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* View Mode Switcher */}
+          <div className="flex items-center rounded-lg border border-border/70 bg-card/60 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("focus")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
+                viewMode === "focus"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Target className="h-3.5 w-3.5" />
+              <span>Focus Question</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("stream")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
+                viewMode === "stream"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span>Full Dialogue Stream ({messages.length})</span>
+            </button>
+          </div>
+
           <QualityScore value={quality} />
           <ProgressDial value={understanding} />
         </div>
@@ -521,18 +651,81 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
 
       {/* Body */}
       <div className="relative z-10 grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[1fr_360px]">
-        {/* Left: focus column */}
+        {/* Left: main column */}
         <div className="flex min-h-0 flex-col overflow-y-auto px-5 py-6 sm:px-8">
-          <div className="mx-auto w-full max-w-2xl space-y-6">
+          <div className="mx-auto w-full max-w-2xl space-y-5">
             {/* Goal pill */}
             {goal && (
-              <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-                <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  <Target className="h-3.5 w-3.5" /> Your Goal
+              <div className="rounded-xl border border-border/60 bg-card/50 p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    <Target className="h-3.5 w-3.5 text-primary" /> Your Goal
+                  </div>
+                  {strategicFocus && (
+                    <span className="text-[10.5px] font-medium text-primary/80">
+                      Focus: {strategicFocus}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1.5 text-base font-medium leading-snug">
                   {goal}
                 </p>
+              </div>
+            )}
+
+            {/* Inferred Knowledge Banner */}
+            {inferredFacts.length > 0 && (
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3.5 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-300">
+                    <Zap className="h-3.5 w-3.5 text-amber-400" /> Inferred by
+                    Intelligence Engine
+                  </div>
+                  <span className="text-[10px] text-violet-200/80">
+                    Deduced automatically · No redundant questions asked
+                  </span>
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {inferredFacts.map((fact) => (
+                    <span
+                      key={fact.id}
+                      title={fact.rationale}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-violet-400/30 bg-card/80 px-2 py-1 text-xs text-foreground/90 font-medium"
+                    >
+                      <span className="text-amber-400">⚡</span>
+                      <span className="text-muted-foreground">
+                        {fact.label}:
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        {fact.value}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active Consultant Signals */}
+            {activeSignals.length > 0 && (
+              <div className="space-y-2">
+                {activeSignals.map((sig, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-100 shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 font-semibold text-amber-200">
+                      <Lightbulb className="h-4 w-4 text-amber-400 shrink-0" />
+                      <span>Consultant Note: {sig.title}</span>
+                    </div>
+                    <p className="mt-1 text-amber-100/90 leading-relaxed">
+                      {sig.description}
+                    </p>
+                    <div className="mt-2 rounded-md bg-black/25 border border-amber-400/20 px-2.5 py-1.5 text-[11px] text-amber-200">
+                      <strong>Consultant Recommendation:</strong>{" "}
+                      {sig.recommendation}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -546,6 +739,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                 )}
                 <FinalPromptCard
                   prompts={finalPromptObj.prompts}
+                  threadId={thread.id}
+                  goalTitle={goal || thread.title}
+                  qualityScore={quality}
                   onRegenerate={handleRegenerate}
                   regenerating={isBusy}
                 />
@@ -556,7 +752,86 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                   </div>
                 )}
               </div>
+            ) : viewMode === "stream" ? (
+              /* Full Dialogue Stream Mode */
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  {messages.map((m, idx) => {
+                    if (idx === 0 && m.role === "user") return null; // Goal already shown above
+                    const isUser = m.role === "user";
+                    const rawText = messageText(m);
+                    const cleanText = stripSlotTag(rawText);
+                    const slotTag = !isUser ? parseSlotTag(rawText) : null;
+                    const slotObj = slotTag
+                      ? expertSlots.find((s) => s.id === slotTag)
+                      : null;
+
+                    return (
+                      <div
+                        key={m.id || idx}
+                        className={cn(
+                          "flex gap-3 text-sm",
+                          isUser ? "justify-end" : "justify-start",
+                        )}
+                      >
+                        {!isUser && (
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-xs font-semibold text-primary">
+                            {expert?.emoji ?? "✨"}
+                          </div>
+                        )}
+                        <div
+                          className={cn(
+                            "max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed",
+                            isUser
+                              ? "bg-primary text-primary-foreground font-medium rounded-br-none"
+                              : "border border-border/70 bg-card/70 text-foreground rounded-bl-none shadow-sm",
+                          )}
+                        >
+                          {!isUser && slotObj && (
+                            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                              <span>Facet:</span>
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5">
+                                {slotObj.label}
+                              </span>
+                            </div>
+                          )}
+                          <MessageResponse>{cleanText}</MessageResponse>
+                        </div>
+                        {isUser && (
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
+                            <User className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Stream Bottom Composer */}
+                <div className="sticky bottom-0 z-20 rounded-xl border border-primary/30 bg-card/95 p-3.5 shadow-lg backdrop-blur">
+                  <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      Question {currentQuestionNumber}:
+                    </span>
+                    {isBusy ? (
+                      <span className="text-primary font-medium">
+                        Consultant thinking…
+                      </span>
+                    ) : (
+                      <span>Respond to consultant</span>
+                    )}
+                  </div>
+                  <ComposerForm
+                    disabled={isBusy}
+                    status={status}
+                    onSubmit={handleSend}
+                    textareaRef={textareaRef}
+                    placeholder="Type your answer to the consultant…"
+                  />
+                </div>
+              </div>
             ) : (
+              /* Focus Question Mode */
               <>
                 {hasFinalPrompt && !ready && (
                   <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
@@ -598,12 +873,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                         )}
                     </div>
                     <div className="text-[10.5px] text-muted-foreground">
-                      {isBusy ? "Preparing…" : "Awaiting your answer"}
+                      {isBusy
+                        ? "Consultant reasoning…"
+                        : "Awaiting your answer"}
                     </div>
                   </div>
                   <div className="p-5">
                     {isBusy && !lastAssistantText ? (
-                      <Shimmer>Thinking of the next question…</Shimmer>
+                      <Shimmer>Consultant crafting dynamic question…</Shimmer>
                     ) : lastAssistant ? (
                       <div className="text-[15px] leading-relaxed">
                         <MessageResponse>{lastAssistantText}</MessageResponse>
@@ -656,7 +933,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
         <aside className="hidden min-h-0 flex-col border-l border-border/50 bg-sidebar/40 lg:flex">
           <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
             <div className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Interview Roadmap
+              Adaptive Roadmap
             </div>
             <div className="rounded-full bg-primary/15 px-2 py-0.5 text-[10.5px] font-semibold text-primary">
               {slotStatuses.filter((s) => s.filled).length}/
@@ -670,6 +947,18 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
               </div>
             ) : (
               <>
+                {/* Strategic Focus Card */}
+                {strategicFocus && (
+                  <div className="mb-4 rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-xs shadow-xs">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                      Consultant Strategic Focus
+                    </div>
+                    <div className="font-medium text-foreground mt-0.5">
+                      {strategicFocus}
+                    </div>
+                  </div>
+                )}
+
                 {/* Missing-info counters */}
                 <div className="mb-4 grid grid-cols-3 gap-2">
                   {(
@@ -727,18 +1016,31 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                               title={s.why}
                               className={
                                 "flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors " +
-                                (s.filled
-                                  ? "border-primary/30 bg-primary/10 text-foreground"
-                                  : p === "critical"
-                                    ? "border-rose-500/30 bg-rose-500/5 text-muted-foreground"
-                                    : "border-border/60 bg-card/30 text-muted-foreground")
+                                (s.filled && s.inferred
+                                  ? "border-violet-500/40 bg-violet-500/10 text-foreground"
+                                  : s.filled
+                                    ? "border-primary/30 bg-primary/10 text-foreground"
+                                    : p === "critical"
+                                      ? "border-rose-500/30 bg-rose-500/5 text-muted-foreground"
+                                      : "border-border/60 bg-card/30 text-muted-foreground")
                               }
                             >
                               <span className="mt-0.5 text-[12px] leading-none">
-                                {s.filled ? "✅" : "❌"}
+                                {s.filled && s.inferred
+                                  ? "⚡"
+                                  : s.filled
+                                    ? "✅"
+                                    : "⏳"}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <div className="font-medium">{s.label}</div>
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-medium">{s.label}</span>
+                                  {s.inferred && (
+                                    <span className="text-[9.5px] font-semibold uppercase tracking-wider text-violet-300">
+                                      Inferred
+                                    </span>
+                                  )}
+                                </div>
                                 {s.filled && s.value && (
                                   <div className="mt-0.5 line-clamp-2 text-[11px] text-foreground/80">
                                     {s.value}

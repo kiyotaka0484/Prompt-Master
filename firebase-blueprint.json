@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "User": {
+      "fields": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "theme": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "Thread": {
+      "fields": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "expert": { "type": "string" },
+        "messages": { "type": "array" },
+        "slots": { "type": "map" },
+        "isFavorite": { "type": "boolean" },
+        "updatedAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "SavedPrompt": {
+      "fields": {
+        "userId": { "type": "string" },
+        "threadId": { "type": "string" },
+        "title": { "type": "string" },
+        "model": { "type": "string" },
+        "content": { "type": "string" },
+        "score": { "type": "number" },
+        "isFavorite": { "type": "boolean" },
+        "tags": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      }
+    }
+  }
+}

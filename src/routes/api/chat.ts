@@ -8,10 +8,13 @@ import {
 import {
   EXPERTS,
   TRIAGE_PROMPT,
-  buildPlannerContext,
   detectExpert,
   type ExpertId,
 } from "@/lib/experts";
+import {
+  analyzeInterview,
+  buildAdaptiveConsultantPrompt,
+} from "@/lib/interview-intelligence";
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 
@@ -19,8 +22,6 @@ type ChatRequestBody = {
   messages?: unknown;
   expert?: ExpertId | null;
 };
-
-const SLOT_TAG_RE = /<!--\s*slot\s*:\s*([a-z0-9_]+)\s*-->/i;
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -44,25 +45,16 @@ export const Route = createFileRoute("/api/chat")({
             ? EXPERTS[expert].systemPrompt
             : TRIAGE_PROMPT;
 
-        // Dynamic Question Planning — inject KNOWN / MISSING inventory each turn.
+        // Interview Intelligence Engine — Real-time adaptive consultant reasoning
         if (expert && EXPERTS[expert] && goalIndex >= 0) {
-          const goalText = messageTextFromUi(uiMessages[goalIndex]).trim();
-          const filled: Record<string, string> = {};
-          // Walk pairs: each assistant message with a slot tag → followed by the next user message = its answer.
-          for (let i = 0; i < uiMessages.length - 1; i++) {
-            const m = uiMessages[i];
-            if (m.role !== "assistant") continue;
-            const tag = SLOT_TAG_RE.exec(messageTextFromUi(m));
-            if (!tag) continue;
-            const next = uiMessages[i + 1];
-            if (next && next.role === "user") {
-              filled[tag[1].toLowerCase()] = messageTextFromUi(next);
-            }
-          }
-          systemPrompt += buildPlannerContext(
+          const relevantMessages = uiMessages.slice(goalIndex);
+          const intelligenceAnalysis = analyzeInterview(
+            relevantMessages,
+            expert,
+          );
+          systemPrompt += buildAdaptiveConsultantPrompt(
             EXPERTS[expert],
-            goalText,
-            filled,
+            intelligenceAnalysis,
           );
         }
 

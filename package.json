@@ -56,6 +56,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
     "embla-carousel-react": "^8.6.0",
+    "firebase": "^12.19.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.23.0",
     "motion": "^12.42.2",
@@ -68,6 +69,7 @@
     "react-resizable-panels": "^4.12.0",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
+    "srvx": "^0.11.22",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.2",
@@ -75,8 +77,7 @@
     "use-stick-to-bottom": "^1.1.6",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.1.1",
-    "zod": "^3.25.76",
-    "srvx": "^0.11.22"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

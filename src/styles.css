@@ -46,8 +46,8 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Dark-first (the app is always dark) */
-:root {
+/* Dark theme (default) */
+:root, html.dark {
   --radius: 0.75rem;
 
   --background: oklch(0.16 0.018 270);
@@ -92,6 +92,52 @@
   --accent-cyan: oklch(0.78 0.14 210);
   --accent-amber: oklch(0.82 0.16 75);
   --accent-rose: oklch(0.75 0.2 12);
+}
+
+/* Light theme */
+html.light {
+  color-scheme: light;
+  --background: oklch(0.985 0.005 260);
+  --foreground: oklch(0.18 0.02 270);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 270);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 270);
+
+  --primary: oklch(0.58 0.22 295);
+  --primary-foreground: oklch(0.99 0.005 260);
+
+  --secondary: oklch(0.94 0.015 270);
+  --secondary-foreground: oklch(0.2 0.02 270);
+
+  --muted: oklch(0.94 0.01 270);
+  --muted-foreground: oklch(0.48 0.02 270);
+
+  --accent: oklch(0.92 0.02 280);
+  --accent-foreground: oklch(0.2 0.02 270);
+
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0.005 260);
+
+  --border: oklch(0.88 0.015 270);
+  --input: oklch(0.88 0.015 270);
+  --ring: oklch(0.58 0.22 295);
+
+  --sidebar: oklch(0.97 0.01 270);
+  --sidebar-foreground: oklch(0.18 0.02 270);
+  --sidebar-primary: oklch(0.58 0.22 295);
+  --sidebar-primary-foreground: oklch(0.99 0.005 260);
+  --sidebar-accent: oklch(0.93 0.02 280);
+  --sidebar-accent-foreground: oklch(0.2 0.02 270);
+  --sidebar-border: oklch(0.88 0.015 270);
+  --sidebar-ring: oklch(0.58 0.22 295);
+
+  --accent-violet: oklch(0.58 0.22 300);
+  --accent-cyan: oklch(0.6 0.16 210);
+  --accent-amber: oklch(0.65 0.18 75);
+  --accent-rose: oklch(0.6 0.22 12);
 }
 
 @layer base {

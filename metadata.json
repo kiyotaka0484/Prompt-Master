@@ -1,6 +1,6 @@
 {
   "name": "Prompt Master",
-  "description": "Interactive prompt engineering workspace and chat assistant for crafting, refining, and testing expert AI prompts.",
+  "description": "AI prompt engineering SaaS platform with Google and GitHub authentication, cloud synchronization, interview history, multi-model prompt generation, and prompt library.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
