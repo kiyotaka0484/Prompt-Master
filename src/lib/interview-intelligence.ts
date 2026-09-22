@@ -1161,5 +1161,5 @@ ${signalsSection}
 3. On the very last line, include the hidden machine slot tag representing the facet you are exploring: \`<!--slot:slot_id-->\`
    (Available slot IDs: ${expert.slots.map((s) => s.id).join(", ")})
 
-When Readiness is 80%+ and you have sufficient domain depth, generate the THREE model-specific master prompts (chatgpt, claude, gemini) and certificate as specified in your master instructions.`;
+When Readiness is 80%+ and you have sufficient domain depth, trigger the AI Optimization Engine: generate the SEVEN model-specific master prompts (chatgpt, claude, gemini, perplexity, grok, cursor, windsurf) and certificate as specified in your master instructions. Never generate identical prompts across models.`;
 }

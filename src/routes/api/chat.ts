@@ -1,8 +1,8 @@
 import {
-  AIProviderError,
   getModel,
   getProviderErrorMessage,
   isAIProviderError,
+  sanitizeAIErrorMessage,
   validateApiKey,
 } from "@/lib/ai-provider";
 import {
@@ -27,10 +27,23 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { messages, expert } = (await request.json()) as ChatRequestBody;
-        if (!Array.isArray(messages)) {
-          return new Response("Messages are required", { status: 400 });
+        let body: ChatRequestBody;
+        try {
+          body = (await request.json()) as ChatRequestBody;
+        } catch {
+          return new Response("Invalid JSON request body", { status: 400 });
         }
+
+        const { messages, expert } = body;
+        if (!Array.isArray(messages) || messages.length === 0) {
+          return new Response(
+            "Messages array is required and cannot be empty",
+            {
+              status: 400,
+            },
+          );
+        }
+
         const uiMessages = messages as UIMessage[];
         const goalIndex = expert
           ? uiMessages.findIndex(
@@ -62,7 +75,7 @@ export const Route = createFileRoute("/api/chat")({
         const keyValidation = validateApiKey();
         if (!keyValidation.valid && keyValidation.error) {
           return new Response(getProviderErrorMessage(keyValidation.error), {
-            status: 500,
+            status: 503,
           });
         }
 
@@ -76,36 +89,28 @@ export const Route = createFileRoute("/api/chat")({
 
           return result.toUIMessageStreamResponse({
             originalMessages: messages as UIMessage[],
+            onError({ error }) {
+              console.error("[api/chat stream error]", error);
+              return sanitizeAIErrorMessage(error);
+            },
           });
         } catch (err) {
-          // Handle provider-specific errors
+          console.error("[api/chat execution error]", err);
+          const safeMessage = sanitizeAIErrorMessage(err);
+
+          let status = 500;
           if (isAIProviderError(err)) {
-            return new Response(getProviderErrorMessage(err), { status: 500 });
+            status = err.code === "rate_limit" ? 429 : 503;
+          } else if (
+            err &&
+            typeof err === "object" &&
+            "statusCode" in err &&
+            typeof (err as { statusCode: unknown }).statusCode === "number"
+          ) {
+            status = (err as { statusCode: number }).statusCode;
           }
 
-          // Handle API SDK errors
-          const status =
-            err && typeof err === "object" && "statusCode" in err
-              ? (err as { statusCode: number }).statusCode
-              : 500;
-
-          let message: string;
-          if (status === 429) {
-            message = "Rate limit hit — please wait a moment and try again.";
-          } else if (status === 401 || status === 403) {
-            message =
-              "API authentication failed. Please check your API key configuration.";
-          } else if (status === 502 || status === 503 || status === 504) {
-            message =
-              "The AI service is temporarily unavailable. Please try again in a moment.";
-          } else if (err instanceof TypeError) {
-            message =
-              "Network error — please check your connection and try again.";
-          } else {
-            message = "Something went wrong generating a response.";
-          }
-
-          return new Response(message, { status });
+          return new Response(safeMessage, { status });
         }
       },
     },

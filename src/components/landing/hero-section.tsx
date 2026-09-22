@@ -107,22 +107,27 @@ export function HeroSection() {
           >
             <div className="flex flex-col sm:flex-row items-stretch gap-2">
               <div className="relative flex-1 flex items-center pl-3">
-                <Target className="h-5 w-5 text-muted-foreground/70 shrink-0 mr-2" />
+                <Target
+                  className="h-5 w-5 text-muted-foreground/70 shrink-0 mr-2"
+                  aria-hidden="true"
+                />
                 <input
                   type="text"
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
                   placeholder="Drop your goal (e.g. I want to build a SaaS startup, learn Python, start a channel…)"
+                  aria-label="Enter your project goal or prompt objective"
                   className="w-full bg-transparent text-sm sm:text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none py-2.5"
                 />
               </div>
 
               <button
                 type="submit"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary via-purple-500 to-fuchsia-600 px-6 py-3 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shrink-0 cursor-pointer"
+                aria-label="Start AI Prompt Interview"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary via-purple-500 to-fuchsia-600 px-6 py-3 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-all duration-200 shrink-0 cursor-pointer min-h-[44px]"
               >
                 <span>Start Interview</span>
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </form>
@@ -137,9 +142,10 @@ export function HeroSection() {
                 key={item.text}
                 type="button"
                 onClick={() => handleChipClick(item.text)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/40 hover:bg-card hover:border-primary/50 px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-all duration-150 cursor-pointer"
+                aria-label={`Start interview with suggestion: ${item.text}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/40 hover:bg-card hover:border-primary/50 px-3.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-all duration-150 cursor-pointer min-h-[36px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
-                <span>{item.emoji}</span>
+                <span aria-hidden="true">{item.emoji}</span>
                 <span className="truncate max-w-[200px] sm:max-w-none">
                   {item.text}
                 </span>

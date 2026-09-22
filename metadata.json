@@ -1,6 +1,6 @@
 {
   "name": "Prompt Master",
-  "description": "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
+  "description": "Adaptive AI interviewer and AI Optimization Engine generating model-tailored prompts for ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, and Windsurf.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

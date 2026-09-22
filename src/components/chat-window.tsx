@@ -15,6 +15,12 @@ import {
   type SlotPriority,
 } from "@/lib/experts";
 import {
+  ALL_MODELS,
+  ensureAllSevenModels,
+  type ModelKey,
+  type MultiModelPrompts,
+} from "@/lib/ai-optimization-engine";
+import {
   analyzeInterview,
   type InferredFact,
   type IntelligenceSignal,
@@ -29,9 +35,12 @@ import {
   Layers,
   Lightbulb,
   MessageSquare,
+  RotateCcw,
   Sparkles,
+  Square,
   Target,
   User,
+  X,
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -169,49 +178,50 @@ function stripCertificate(text: string): string {
   return text.replace(CERT_BLOCK_RE, "").trim();
 }
 
-export interface MultiModelPrompts {
-  chatgpt: string;
-  claude: string;
-  gemini: string;
-}
-
-const MODEL_FENCE_RE = /```(chatgpt|claude|gemini)\s*\n([\s\S]*?)```/gi;
+const MODEL_FENCE_RE =
+  /```(chatgpt|claude|gemini|perplexity|grok|cursor|windsurf)\s*\n([\s\S]*?)```/gi;
 const ANY_FENCE_RE = /```(?:prompt|markdown|md|text)?\s*\n?([\s\S]*?)```/i;
 
 function extractFinalPrompt(
   text: string,
+  goal?: string,
+  expertDomain?: string,
 ): { intro: string; prompts: MultiModelPrompts; outro: string } | null {
-  const found: Partial<Record<keyof MultiModelPrompts, string>> = {};
+  const found: Partial<Record<ModelKey, string>> = {};
   let firstIndex = Infinity;
   let lastEnd = -1;
   let m: RegExpExecArray | null;
   MODEL_FENCE_RE.lastIndex = 0;
   while ((m = MODEL_FENCE_RE.exec(text)) !== null) {
-    const key = m[1].toLowerCase() as keyof MultiModelPrompts;
+    const key = m[1].toLowerCase() as ModelKey;
     const body = m[2].trim();
-    if (body.length < 40) continue;
+    if (body.length < 30) continue;
     found[key] = body;
     if (m.index < firstIndex) firstIndex = m.index;
     lastEnd = Math.max(lastEnd, m.index + m[0].length);
   }
-  if (found.chatgpt && found.claude && found.gemini) {
+
+  // If one or more model fences were detected, ensure all 7 models are populated
+  if (Object.keys(found).length > 0) {
+    const resolved = ensureAllSevenModels(found, { goal, expertDomain });
     return {
       intro: stripCertificate(text.slice(0, firstIndex)).trim(),
-      prompts: {
-        chatgpt: found.chatgpt,
-        claude: found.claude,
-        gemini: found.gemini,
-      },
+      prompts: resolved,
       outro: stripCertificate(text.slice(lastEnd)).trim(),
     };
   }
-  // Legacy single-prompt fallback (mirror across all three tabs so old messages still render).
+
+  // Legacy single-prompt fallback (synthesize native prompts for all 7 models)
   const legacy = ANY_FENCE_RE.exec(text);
   if (legacy && legacy[1].trim().length >= 80) {
     const prompt = legacy[1].trim();
+    const resolved = ensureAllSevenModels(
+      { chatgpt: prompt },
+      { goal, expertDomain },
+    );
     return {
       intro: stripCertificate(text.slice(0, legacy.index)).trim(),
-      prompts: { chatgpt: prompt, claude: prompt, gemini: prompt },
+      prompts: resolved,
       outro: stripCertificate(
         text.slice(legacy.index + legacy[0].length),
       ).trim(),
@@ -254,12 +264,13 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const activeExpertId = detectedExpertRef.current ?? thread.expert;
   const expert = activeExpertId ? EXPERTS[activeExpertId] : null;
 
-  const { messages, sendMessage, status, error } = useChat({
-    id: thread.id,
-    messages: thread.messages,
-    transport,
-    onError: (err) => toast.error(err.message || "Something went wrong"),
-  });
+  const { messages, sendMessage, status, error, regenerate, clearError, stop } =
+    useChat({
+      id: thread.id,
+      messages: thread.messages,
+      transport,
+      onError: (err) => toast.error(err.message || "Something went wrong"),
+    });
 
   useEffect(() => {
     if (status === "ready") textareaRef.current?.focus();
@@ -267,20 +278,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
 
   // --- derive interview state ---
   const userMessages = messages.filter((m) => m.role === "user");
-  const lastAssistant = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant");
-  const lastAssistantRaw = lastAssistant ? messageText(lastAssistant) : "";
-  const lastAssistantText = stripSlotTag(lastAssistantRaw);
-  const lastSlot = lastAssistant ? parseSlotTag(lastAssistantRaw) : null;
-  const finalPromptObj = lastAssistant
-    ? extractFinalPrompt(lastAssistantText)
-    : null;
-  const certificate = lastAssistant
-    ? extractCertificate(lastAssistantRaw)
-    : null;
-  const hasFinalPrompt = !!finalPromptObj;
-
   const goalEntry = userMessages
     .map((message) => {
       const text = messageText(message).trim();
@@ -290,6 +287,24 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const goal = goalEntry?.text ?? "";
   const goalMessageIndex = goalEntry ? messages.indexOf(goalEntry.message) : -1;
   const isIntentDiscovery = !goal;
+
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant");
+  const lastAssistantRaw = lastAssistant ? messageText(lastAssistant) : "";
+  const lastAssistantText = stripSlotTag(lastAssistantRaw);
+  const lastSlot = lastAssistant ? parseSlotTag(lastAssistantRaw) : null;
+  const finalPromptObj = lastAssistant
+    ? extractFinalPrompt(
+        lastAssistantText,
+        goal,
+        activeExpertId ?? goalEntry?.expert ?? undefined,
+      )
+    : null;
+  const certificate = lastAssistant
+    ? extractCertificate(lastAssistantRaw)
+    : null;
+  const hasFinalPrompt = !!finalPromptObj;
 
   const [viewMode, setViewMode] = useState<"focus" | "stream">("focus");
 
@@ -454,6 +469,8 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const showWelcome = messages.length === 0;
 
   function handleSend(text: string) {
+    if (isBusy) return;
+    if (error) clearError();
     // Keep retrying expert detection until we lock one in.
     if (!detectedExpertRef.current) {
       const detected = detectExpert(text);
@@ -476,13 +493,28 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   }
 
   function handleRegenerate() {
-    if (!detectedExpertRef.current) return;
+    if (!detectedExpertRef.current || isBusy) return;
+    if (error) clearError();
     void sendMessage(
       {
-        text: "Please regenerate all three master prompts (ChatGPT, Claude, Gemini) using every detail I shared above. Keep each one optimized for its model's style, and return them in the same three fenced blocks (```chatgpt, ```claude, ```gemini) followed by the certificate.",
+        text: "Please regenerate all 7 master prompts (ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, Windsurf) using every detail I shared above. Keep each one optimized for its model's unique architecture, and return them in the same seven fenced blocks (```chatgpt, ```claude, ```gemini, ```perplexity, ```grok, ```cursor, ```windsurf) followed by the certificate.",
       },
       { body: { expert: detectedExpertRef.current } },
     );
+  }
+
+  function handleRetry() {
+    if (isBusy) return;
+    clearError();
+    if (messages.length > 0) {
+      void regenerate({
+        body: { expert: detectedExpertRef.current ?? thread.expert ?? null },
+      });
+    }
+  }
+
+  function handleStop() {
+    stop();
   }
 
   function handleContinueInterview() {
@@ -542,6 +574,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
               disabled={isBusy}
               status={status}
               onSubmit={handleSend}
+              onStop={handleStop}
               textareaRef={textareaRef}
               placeholder="e.g. I want to start a business, build an app, learn a skill…"
               big
@@ -560,9 +593,10 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                 type="button"
                 onClick={() => handleSend(s.text)}
                 disabled={isBusy}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-xs text-muted-foreground transition-all duration-150 hover:border-primary/50 hover:bg-card hover:text-foreground cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                aria-label={`Start interview with goal: ${s.text}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-xs text-muted-foreground transition-all duration-150 hover:border-primary/50 hover:bg-card hover:text-foreground cursor-pointer hover:scale-[1.02] active:scale-[0.98] min-h-[36px] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               >
-                <span>{s.emoji}</span>
+                <span aria-hidden="true">{s.emoji}</span>
                 <span>{s.text}</span>
               </button>
             ))}
@@ -813,9 +847,19 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                       Question {currentQuestionNumber}:
                     </span>
                     {isBusy ? (
-                      <span className="text-primary font-medium">
-                        Consultant thinking…
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-primary font-medium">
+                          Consultant thinking…
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleStop}
+                          className="inline-flex items-center gap-1 rounded border border-border/80 bg-card/80 px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        >
+                          <Square className="h-2.5 w-2.5 fill-current" />
+                          <span>Stop</span>
+                        </button>
+                      </div>
                     ) : (
                       <span>Respond to consultant</span>
                     )}
@@ -824,6 +868,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                     disabled={isBusy}
                     status={status}
                     onSubmit={handleSend}
+                    onStop={handleStop}
                     textareaRef={textareaRef}
                     placeholder="Type your answer to the consultant…"
                   />
@@ -871,10 +916,22 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                           </span>
                         )}
                     </div>
-                    <div className="text-[10.5px] text-muted-foreground">
-                      {isBusy
-                        ? "Consultant reasoning…"
-                        : "Awaiting your answer"}
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10.5px] text-muted-foreground">
+                        {isBusy
+                          ? "Consultant reasoning…"
+                          : "Awaiting your answer"}
+                      </div>
+                      {isBusy && (
+                        <button
+                          type="button"
+                          onClick={handleStop}
+                          className="inline-flex items-center gap-1 rounded border border-border/80 bg-card/80 px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        >
+                          <Square className="h-2.5 w-2.5 fill-current" />
+                          <span>Stop</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="p-5">
@@ -884,8 +941,15 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                       <div className="text-[15px] leading-relaxed">
                         <MessageResponse>{lastAssistantText}</MessageResponse>
                       </div>
+                    ) : error ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive">
+                        Unable to load consultant question. Click{" "}
+                        <strong>Retry</strong> below to continue your interview.
+                      </div>
                     ) : (
-                      <Shimmer>Loading…</Shimmer>
+                      <div className="text-sm text-muted-foreground">
+                        Ready for your answer.
+                      </div>
                     )}
 
                     {lastAssistant && !isBusy && (
@@ -904,6 +968,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                         disabled={isBusy}
                         status={status}
                         onSubmit={handleSend}
+                        onStop={handleStop}
                         textareaRef={textareaRef}
                         placeholder="Type your answer  ·  or ask: what does this mean?"
                       />
@@ -921,8 +986,33 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
             )}
 
             {error && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-                {error.message}
+              <div
+                role="alert"
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-sm text-destructive shadow-sm"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span className="break-words font-medium">
+                    {error.message || "An error occurred during generation."}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground shadow-sm hover:bg-destructive/90 transition-colors"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => clearError()}
+                    className="rounded-lg border border-destructive/30 px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/15 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1289,6 +1379,7 @@ function ComposerForm({
   disabled,
   status,
   onSubmit,
+  onStop,
   textareaRef,
   placeholder,
   big,
@@ -1296,6 +1387,7 @@ function ComposerForm({
   disabled: boolean;
   status: ReturnType<typeof useChat>["status"];
   onSubmit: (text: string) => void;
+  onStop?: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   placeholder: string;
   big?: boolean;
@@ -1311,10 +1403,15 @@ function ComposerForm({
       <PromptInputTextarea
         ref={textareaRef as never}
         placeholder={placeholder}
+        aria-label={placeholder || "Your answer to the interview question"}
         className={big ? "min-h-[80px] text-base" : undefined}
       />
       <PromptInputFooter className="justify-end">
-        <PromptInputSubmit status={status} disabled={disabled} />
+        <PromptInputSubmit
+          status={status}
+          disabled={disabled}
+          onStop={onStop}
+        />
       </PromptInputFooter>
     </PromptInput>
   );

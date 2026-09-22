@@ -38,12 +38,21 @@ export interface CloudThreadRecord {
   messages: UIMessage[];
 }
 
+export type SupportedModelKey =
+  | "chatgpt"
+  | "claude"
+  | "gemini"
+  | "perplexity"
+  | "grok"
+  | "cursor"
+  | "windsurf";
+
 export interface SavedPromptRecord {
   id: string;
   userId: string;
   threadId: string;
   title: string;
-  model: "claude" | "chatgpt" | "gemini" | "all";
+  model: SupportedModelKey | "all" | string;
   content: string;
   score: number;
   isFavorite: boolean;
@@ -158,7 +167,9 @@ export async function deleteThreadFromCloud(
 export function subscribeToUserThreads(
   userId: string,
   onUpdate: (threads: CloudThreadRecord[]) => void,
+  onError?: (err: Error) => void,
 ): () => void {
+  if (!userId) return () => {};
   const q = query(collection(db, "threads"), where("userId", "==", userId));
 
   return onSnapshot(
@@ -174,6 +185,7 @@ export function subscribeToUserThreads(
     },
     (err) => {
       console.error("Error subscribing to cloud threads:", err);
+      onError?.(err);
     },
   );
 }
@@ -205,14 +217,18 @@ export function saveLocalSavedPrompts(prompts: SavedPromptRecord[]): void {
 export async function savePromptToCloud(
   prompt: Omit<SavedPromptRecord, "createdAt" | "updatedAt">,
 ): Promise<SavedPromptRecord> {
+  const docRef = doc(db, "saved_prompts", prompt.id);
+  const snap = await getDoc(docRef);
+  const now = Date.now();
+  const existing = snap.exists() ? (snap.data() as SavedPromptRecord) : null;
+
   const full: SavedPromptRecord = {
     ...prompt,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
   };
 
-  const docRef = doc(db, "saved_prompts", prompt.id);
-  await setDoc(docRef, full);
+  await setDoc(docRef, full, { merge: true });
   return full;
 }
 
@@ -235,7 +251,9 @@ export async function deletePromptFromCloud(promptId: string): Promise<void> {
 export function subscribeToSavedPrompts(
   userId: string,
   onUpdate: (prompts: SavedPromptRecord[]) => void,
+  onError?: (err: Error) => void,
 ): () => void {
+  if (!userId) return () => {};
   const q = query(
     collection(db, "saved_prompts"),
     where("userId", "==", userId),
@@ -253,6 +271,7 @@ export function subscribeToSavedPrompts(
     },
     (err) => {
       console.error("Error subscribing to saved prompts:", err);
+      onError?.(err);
     },
   );
 }
@@ -269,24 +288,35 @@ export async function syncLocalToCloud(
     isFavorite?: boolean;
   }[],
   localSavedPrompts: SavedPromptRecord[],
-): Promise<{ threadsSynced: number; promptsSynced: number }> {
+): Promise<{ threadsSynced: number; promptsSynced: number; errors: number }> {
   let threadsSynced = 0;
   let promptsSynced = 0;
+  let errors = 0;
 
   for (const t of localThreads) {
-    if (t.messages.length > 0) {
-      await saveThreadToCloud(userId, t);
-      threadsSynced++;
+    if (t.messages && t.messages.length > 0) {
+      try {
+        await saveThreadToCloud(userId, t);
+        threadsSynced++;
+      } catch (err) {
+        console.error(`Failed to sync thread ${t.id} to cloud:`, err);
+        errors++;
+      }
     }
   }
 
   for (const p of localSavedPrompts) {
-    await savePromptToCloud({
-      ...p,
-      userId,
-    });
-    promptsSynced++;
+    try {
+      await savePromptToCloud({
+        ...p,
+        userId,
+      });
+      promptsSynced++;
+    } catch (err) {
+      console.error(`Failed to sync prompt ${p.id} to cloud:`, err);
+      errors++;
+    }
   }
 
-  return { threadsSynced, promptsSynced };
+  return { threadsSynced, promptsSynced, errors };
 }

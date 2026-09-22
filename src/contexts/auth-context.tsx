@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import {
@@ -59,6 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setThemeState] = useState<ThemePreference>("dark");
+  const themeRef = useRef<ThemePreference>(theme);
+
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   // Initialize theme from storage
   useEffect(() => {
@@ -68,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ) as ThemePreference | null;
     const initialTheme: ThemePreference = stored === "light" ? "light" : "dark";
     setThemeState(initialTheme);
+    themeRef.current = initialTheme;
     applyThemeToDom(initialTheme);
   }, []);
 
@@ -77,10 +84,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(currentUser);
       if (currentUser) {
         try {
-          const userProfile = await syncUserProfile(currentUser, theme);
+          const userProfile = await syncUserProfile(
+            currentUser,
+            themeRef.current,
+          );
           setProfile(userProfile);
-          if (userProfile.theme && userProfile.theme !== theme) {
+          if (userProfile.theme && userProfile.theme !== themeRef.current) {
             setThemeState(userProfile.theme);
+            themeRef.current = userProfile.theme;
             applyThemeToDom(userProfile.theme);
             window.localStorage.setItem(THEME_STORAGE_KEY, userProfile.theme);
           }
@@ -94,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [theme]);
+  }, []);
 
   const setTheme = async (newTheme: ThemePreference) => {
     setThemeState(newTheme);
@@ -178,9 +189,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const localThreads = loadThreads();
       const localSaved = loadLocalSavedPrompts();
       const result = await syncLocalToCloud(user.uid, localThreads, localSaved);
-      toast.success(
-        `Cloud sync complete: ${result.threadsSynced} interviews and ${result.promptsSynced} saved prompts synced!`,
-      );
+      if (result.errors > 0) {
+        toast.warning(
+          `Synced ${result.threadsSynced} interviews and ${result.promptsSynced} saved prompts (${result.errors} item(s) skipped).`,
+        );
+      } else {
+        toast.success(
+          `Cloud sync complete: ${result.threadsSynced} interviews and ${result.promptsSynced} saved prompts synced!`,
+        );
+      }
     } catch (err) {
       console.error("Manual sync failed:", err);
       toast.error("Cloud synchronization encountered an error.");

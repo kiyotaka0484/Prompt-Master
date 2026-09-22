@@ -48,6 +48,23 @@ function ChatThreadPage() {
   const [ready, setReady] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Automatically dismiss mobile drawer on thread change
+  useEffect(() => {
+    setMobileSidebar(false);
+  }, [threadId]);
+
+  // Handle Escape key to close mobile sidebar drawer
+  useEffect(() => {
+    if (!mobileSidebar) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileSidebar(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileSidebar]);
   const [liveProgress, setLiveProgress] = useState<{
     progress: number;
     quality: number;
@@ -299,28 +316,38 @@ function ChatThreadPage() {
       <div className="hidden md:block">{sidebar}</div>
 
       {mobileSidebar && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation and session sidebar"
+          className="fixed inset-0 z-40 md:hidden"
+        >
           <div
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 transition-opacity"
             onClick={() => setMobileSidebar(false)}
-            aria-hidden
+            aria-hidden="true"
           />
-          <div className="absolute inset-y-0 left-0 shadow-2xl">{sidebar}</div>
+          <div className="absolute inset-y-0 left-0 shadow-2xl z-10">
+            {sidebar}
+          </div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col min-w-0">
-        <div className="flex items-center justify-between border-b border-border/50 px-3 py-2 md:hidden">
+        <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5 md:hidden">
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="sm"
             onClick={() => setMobileSidebar((v) => !v)}
-            aria-label="Toggle sidebar"
+            aria-label={
+              mobileSidebar ? "Close sidebar menu" : "Open sidebar menu"
+            }
+            className="h-9 w-9 p-0 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             {mobileSidebar ? (
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             ) : (
-              <Menu className="h-4 w-4" />
+              <Menu className="h-4 w-4" aria-hidden="true" />
             )}
           </Button>
 
@@ -331,26 +358,33 @@ function ChatThreadPage() {
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               onClick={() => toggleTheme()}
+              aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
               title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
+              className="h-9 w-9 p-0 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-amber-400" />
+                <Sun className="h-4 w-4 text-amber-400" aria-hidden="true" />
               ) : (
-                <Moon className="h-4 w-4 text-primary" />
+                <Moon className="h-4 w-4 text-primary" aria-hidden="true" />
               )}
             </Button>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               onClick={() => setAuthModalOpen(true)}
+              aria-label="Account and cloud settings"
               title="Account & Cloud Sync"
+              className="h-9 w-9 p-0 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {user ? (
-                <Cloud className="h-4 w-4 text-emerald-400" />
+                <Cloud
+                  className="h-4 w-4 text-emerald-400"
+                  aria-hidden="true"
+                />
               ) : (
-                <UserIcon className="h-4 w-4" />
+                <UserIcon className="h-4 w-4" aria-hidden="true" />
               )}
             </Button>
           </div>

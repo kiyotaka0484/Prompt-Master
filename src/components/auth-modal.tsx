@@ -47,10 +47,10 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-border/80 bg-card p-6 shadow-2xl backdrop-blur-2xl">
+      <DialogContent className="max-w-md border-border/80 bg-card p-4 sm:p-6 shadow-2xl backdrop-blur-2xl">
         <DialogHeader>
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 shadow-lg shadow-primary/20">
-            <Cloud className="h-6 w-6 text-primary" />
+            <Cloud className="h-6 w-6 text-primary" aria-hidden="true" />
           </div>
           <DialogTitle className="text-center text-xl font-bold tracking-tight">
             {user ? "Your Prompt Master Account" : "Sign In to Prompt Master"}
@@ -83,7 +83,8 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     {user.displayName || "Prompter"}
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    <CheckCircle2 className="h-3 w-3" /> Synced
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />{" "}
+                    Synced
                   </span>
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
@@ -99,17 +100,22 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 font-medium">
-                  <Cloud className="h-4 w-4 text-emerald-400" />
+                  <Cloud
+                    className="h-4 w-4 text-emerald-400"
+                    aria-hidden="true"
+                  />
                   <span>Cloud Database Active</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleSync}
                   disabled={syncing}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 underline hover:text-emerald-300 disabled:opacity-50"
+                  aria-label="Synchronize local data to cloud database now"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 underline hover:text-emerald-300 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none rounded"
                 >
                   <RefreshCw
                     className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`}
+                    aria-hidden="true"
                   />
                   <span>{syncing ? "Syncing…" : "Sync Now"}</span>
                 </button>
@@ -124,9 +130,9 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
             <div className="flex items-center justify-between rounded-xl border border-border/70 bg-background/40 px-3.5 py-2.5">
               <div className="flex items-center gap-2">
                 {theme === "dark" ? (
-                  <Moon className="h-4 w-4 text-primary" />
+                  <Moon className="h-4 w-4 text-primary" aria-hidden="true" />
                 ) : (
-                  <Sun className="h-4 w-4 text-amber-500" />
+                  <Sun className="h-4 w-4 text-amber-500" aria-hidden="true" />
                 )}
                 <div>
                   <div className="text-xs font-semibold">Theme Mode</div>
@@ -139,6 +145,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => toggleTheme()}
+                aria-label={`Switch theme to ${theme === "dark" ? "Light" : "Dark"}`}
                 className="h-7 text-xs"
               >
                 Switch to {theme === "dark" ? "Light" : "Dark"}
@@ -164,7 +171,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 }}
                 className="inline-flex items-center gap-1.5"
               >
-                <LogOut className="h-3.5 w-3.5" /> Sign Out
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" /> Sign Out
               </Button>
             </div>
           </div>
@@ -173,15 +180,24 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
             {/* Feature bullets */}
             <div className="grid grid-cols-1 gap-2 rounded-xl border border-border/60 bg-background/50 p-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-2 text-foreground">
-                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <Sparkles
+                  className="h-3.5 w-3.5 text-primary shrink-0"
+                  aria-hidden="true"
+                />
                 <span>Save and favorite your multi-model prompts</span>
               </div>
               <div className="flex items-center gap-2 text-foreground">
-                <Cloud className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                <Cloud
+                  className="h-3.5 w-3.5 text-sky-400 shrink-0"
+                  aria-hidden="true"
+                />
                 <span>Real-time cloud backup via Firebase Firestore</span>
               </div>
               <div className="flex items-center gap-2 text-foreground">
-                <Shield className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <Shield
+                  className="h-3.5 w-3.5 text-emerald-400 shrink-0"
+                  aria-hidden="true"
+                />
                 <span>Private & secure authentication via OAuth</span>
               </div>
             </div>
@@ -195,9 +211,10 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   onOpenChange(false);
                 }}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-3 rounded-xl border border-border/80 bg-background/90 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-card hover:border-primary/40 active:scale-[0.99] transition-all cursor-pointer"
+                aria-label="Continue with Google"
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-border/80 bg-background/90 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-card hover:border-primary/40 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-all cursor-pointer min-h-[44px]"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
                   <path
                     fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -225,11 +242,13 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   onOpenChange(false);
                 }}
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-3 rounded-xl border border-border/80 bg-background/90 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-card hover:border-primary/40 active:scale-[0.99] transition-all cursor-pointer"
+                aria-label="Continue with GitHub"
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-border/80 bg-background/90 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-card hover:border-primary/40 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-all cursor-pointer min-h-[44px]"
               >
                 <svg
                   className="h-4 w-4 fill-current text-foreground"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     fillRule="evenodd"
@@ -248,15 +267,20 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => toggleTheme()}
+                aria-label={`Toggle theme: currently ${theme} mode`}
                 className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
                 {theme === "dark" ? (
                   <>
-                    <Moon className="h-3 w-3" /> Dark
+                    <Moon className="h-3 w-3" aria-hidden="true" /> Dark
                   </>
                 ) : (
                   <>
-                    <Sun className="h-3 w-3 text-amber-500" /> Light
+                    <Sun
+                      className="h-3 w-3 text-amber-500"
+                      aria-hidden="true"
+                    />{" "}
+                    Light
                   </>
                 )}
               </Button>

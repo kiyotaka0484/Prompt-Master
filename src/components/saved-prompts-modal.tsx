@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -130,23 +131,47 @@ export function SavedPromptsModal({
   }, [prompts, searchQuery, modelFilter, favoritesOnly]);
 
   const modelBadge = (model: string) => {
-    switch (model) {
-      case "claude":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[11px] font-semibold text-orange-400">
-            🟠 Claude
-          </span>
-        );
+    switch (model.toLowerCase()) {
       case "chatgpt":
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
             🟢 ChatGPT
           </span>
         );
+      case "claude":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[11px] font-semibold text-orange-400">
+            🟠 Claude
+          </span>
+        );
       case "gemini":
         return (
           <span className="inline-flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-400">
             🔷 Gemini
+          </span>
+        );
+      case "perplexity":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[11px] font-semibold text-teal-400">
+            🌐 Perplexity
+          </span>
+        );
+      case "grok":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-zinc-500/40 bg-zinc-500/10 px-2 py-0.5 text-[11px] font-semibold text-zinc-200">
+            ⚡ Grok
+          </span>
+        );
+      case "cursor":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-400">
+            💻 Cursor
+          </span>
+        );
+      case "windsurf":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-md border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400">
+            🌊 Windsurf
           </span>
         );
       default:
@@ -160,25 +185,25 @@ export function SavedPromptsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card p-6">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col bg-card p-4 sm:p-6">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Bookmark className="h-5 w-5" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
+                <Bookmark className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
                 <DialogTitle className="text-lg font-bold">
                   Prompt Library & Favorites
                 </DialogTitle>
-                <div className="text-xs text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                   {user
                     ? "Backed up to your cloud account in real time."
                     : "Stored locally in this browser. Sign in to sync across devices."}
-                </div>
+                </DialogDescription>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground font-mono">
+            <div className="text-xs text-muted-foreground font-mono tabular-nums">
               {filteredPrompts.length} of {prompts.length} prompts
             </div>
           </div>
@@ -187,23 +212,42 @@ export function SavedPromptsModal({
         {/* Search & Filter Bar */}
         <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search prompts by title, keywords, or content…"
+              aria-label="Search saved prompts"
               className="pl-9 bg-background text-xs sm:text-sm h-9"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {["all", "claude", "chatgpt", "gemini"].map((m) => (
+          <div
+            role="toolbar"
+            aria-label="Filter prompts by model and favorites"
+            className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1"
+          >
+            {[
+              "all",
+              "chatgpt",
+              "claude",
+              "gemini",
+              "perplexity",
+              "grok",
+              "cursor",
+              "windsurf",
+            ].map((m) => (
               <Button
                 key={m}
                 size="sm"
                 variant={modelFilter === m ? "default" : "outline"}
                 onClick={() => setModelFilter(m)}
-                className="h-9 text-xs capitalize"
+                aria-pressed={modelFilter === m}
+                aria-label={`Filter by ${m === "all" ? "all models" : m}`}
+                className="h-8 text-xs capitalize whitespace-nowrap shrink-0"
               >
                 {m === "all" ? "All Models" : m}
               </Button>
@@ -213,10 +257,15 @@ export function SavedPromptsModal({
               size="sm"
               variant={favoritesOnly ? "default" : "outline"}
               onClick={() => setFavoritesOnly(!favoritesOnly)}
-              className="h-9 text-xs gap-1"
+              aria-pressed={favoritesOnly}
+              aria-label={
+                favoritesOnly ? "Show all prompts" : "Filter by favorites only"
+              }
+              className="h-8 text-xs gap-1 shrink-0"
             >
               <Star
                 className={`h-3.5 w-3.5 ${favoritesOnly ? "fill-current" : ""}`}
+                aria-hidden="true"
               />
               <span>Favorites</span>
             </Button>
@@ -227,7 +276,10 @@ export function SavedPromptsModal({
         <div className="mt-4 flex-1 overflow-y-auto space-y-3 pr-1 min-h-[300px]">
           {filteredPrompts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-center p-6 rounded-xl border border-dashed border-border/70">
-              <Sparkles className="h-8 w-8 text-muted-foreground/60 mb-2" />
+              <Sparkles
+                className="h-8 w-8 text-muted-foreground/60 mb-2"
+                aria-hidden="true"
+              />
               <div className="text-sm font-semibold text-foreground">
                 No saved prompts found
               </div>
@@ -261,11 +313,16 @@ export function SavedPromptsModal({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => handleToggleFavorite(p)}
+                      aria-label={
+                        p.isFavorite
+                          ? `Remove ${p.title} from favorites`
+                          : `Add ${p.title} to favorites`
+                      }
                       title={
                         p.isFavorite
                           ? "Remove from favorites"
@@ -279,6 +336,7 @@ export function SavedPromptsModal({
                     >
                       <Star
                         className={`h-4 w-4 ${p.isFavorite ? "fill-amber-400" : ""}`}
+                        aria-hidden="true"
                       />
                     </Button>
 
@@ -286,13 +344,17 @@ export function SavedPromptsModal({
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => handleCopy(p)}
+                      aria-label={`Copy ${p.title} prompt to clipboard`}
                       title="Copy to clipboard"
                       className="text-muted-foreground hover:text-foreground"
                     >
                       {copiedId === p.id ? (
-                        <Check className="h-4 w-4 text-emerald-400" />
+                        <Check
+                          className="h-4 w-4 text-emerald-400"
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <Copy className="h-4 w-4" />
+                        <Copy className="h-4 w-4" aria-hidden="true" />
                       )}
                     </Button>
 
@@ -301,10 +363,11 @@ export function SavedPromptsModal({
                         to="/chat/$threadId"
                         params={{ threadId: p.threadId }}
                         onClick={() => onOpenChange(false)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        aria-label={`Open interview session for ${p.title}`}
                         title="Open interview session"
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4" aria-hidden="true" />
                       </Link>
                     )}
 
@@ -312,16 +375,21 @@ export function SavedPromptsModal({
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => handleDelete(p.id)}
+                      aria-label={`Delete prompt ${p.title}`}
                       title="Delete prompt"
                       className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
 
                 <div className="mt-3">
-                  <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-card/60 p-3 font-mono text-xs text-foreground/90 leading-relaxed border border-border/40">
+                  <pre
+                    tabIndex={0}
+                    aria-label={`Content of ${p.title}`}
+                    className="max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-card/60 p-3 font-mono text-xs text-foreground/90 leading-relaxed border border-border/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                  >
                     {p.content}
                   </pre>
                 </div>

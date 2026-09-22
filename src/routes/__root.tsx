@@ -121,23 +121,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         {
           title:
-            "Prompt Master — Adaptive AI Interviewer & Prompt Engineering Studio",
+            "Prompt Master — Adaptive AI Interviewer & Multi-Model Optimization Engine",
         },
         {
           name: "description",
           content:
-            "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
+            "Adaptive AI interviewer and AI Optimization Engine generating model-tailored prompts for ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, and Windsurf.",
         },
         { name: "author", content: "Prompt Master" },
         {
           property: "og:title",
           content:
-            "Prompt Master — Adaptive AI Interviewer & Prompt Engineering Studio",
+            "Prompt Master — Adaptive AI Interviewer & Multi-Model Optimization Engine",
         },
         {
           property: "og:description",
           content:
-            "Adaptive AI interviewer and prompt engineering SaaS platform with Interview Intelligence Engine, dynamic follow-up reasoning, contradiction and vagueness detection, and multi-model master prompt generation.",
+            "Adaptive AI interviewer and AI Optimization Engine generating model-tailored prompts for ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, and Windsurf.",
         },
         { property: "og:type", content: "website" },
         { property: "og:site_name", content: "Prompt Master" },

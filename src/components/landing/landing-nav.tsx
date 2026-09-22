@@ -107,13 +107,14 @@ export function LandingNav() {
             <button
               type="button"
               onClick={() => toggleTheme()}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+              aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
+              className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
             >
               {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-amber-400" />
+                <Sun className="h-4 w-4 text-amber-400" aria-hidden="true" />
               ) : (
-                <Moon className="h-4 w-4 text-primary" />
+                <Moon className="h-4 w-4 text-primary" aria-hidden="true" />
               )}
             </button>
 
@@ -121,10 +122,14 @@ export function LandingNav() {
             <button
               type="button"
               onClick={() => setLibraryModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+              aria-label="Open Prompt Library and Favorites"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title="Open Prompt Library & Favorites"
             >
-              <Bookmark className="h-3.5 w-3.5 text-primary" />
+              <Bookmark
+                className="h-3.5 w-3.5 text-primary"
+                aria-hidden="true"
+              />
               <span>Library</span>
             </button>
 
@@ -185,41 +190,52 @@ export function LandingNav() {
           </div>
 
           {/* Mobile menu toggle & quick buttons */}
-          <div className="flex items-center gap-2 sm:hidden">
+          <div className="flex items-center gap-1.5 sm:hidden">
             <button
               type="button"
               onClick={() => toggleTheme()}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"
+              aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
+              className="h-10 w-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-amber-400" />
+                <Sun className="h-4 w-4 text-amber-400" aria-hidden="true" />
               ) : (
-                <Moon className="h-4 w-4 text-primary" />
+                <Moon className="h-4 w-4 text-primary" aria-hidden="true" />
               )}
             </button>
 
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"
+              aria-label={
+                user ? "Open account settings" : "Sign in or create account"
+              }
+              className="h-10 w-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {user ? (
-                <Cloud className="h-4 w-4 text-emerald-400" />
+                <Cloud
+                  className="h-4 w-4 text-emerald-400"
+                  aria-hidden="true"
+                />
               ) : (
-                <UserIcon className="h-4 w-4" />
+                <UserIcon className="h-4 w-4" aria-hidden="true" />
               )}
             </button>
 
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground"
-              aria-label="Toggle navigation menu"
+              className="h-10 w-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+              aria-label={
+                mobileMenuOpen
+                  ? "Close navigation menu"
+                  : "Open navigation menu"
+              }
             >
               {mobileMenuOpen ? (
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               ) : (
-                <Menu className="h-5 w-5" />
+                <Menu className="h-5 w-5" aria-hidden="true" />
               )}
             </button>
           </div>

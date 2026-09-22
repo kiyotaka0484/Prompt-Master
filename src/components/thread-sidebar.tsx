@@ -131,22 +131,24 @@ export function ThreadSidebar({
             <button
               type="button"
               onClick={() => toggleTheme()}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+              aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
             >
               {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-amber-400" />
+                <Sun className="h-4 w-4 text-amber-400" aria-hidden="true" />
               ) : (
-                <Moon className="h-4 w-4 text-primary" />
+                <Moon className="h-4 w-4 text-primary" aria-hidden="true" />
               )}
             </button>
 
             <Link
               to="/"
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground transition-colors"
+              aria-label="Return to Home page"
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
               title="Home / Landing Page"
             >
-              <Home className="h-4 w-4" />
+              <Home className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         </div>
@@ -156,21 +158,23 @@ export function ThreadSidebar({
           <button
             type="button"
             onClick={handleNewSession}
+            aria-label="Start new interview session"
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary",
-              "hover:bg-primary/20 hover:border-primary/50 active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-primary/10",
+              "hover:bg-primary/20 hover:border-primary/50 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-all cursor-pointer shadow-sm shadow-primary/10",
             )}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
             <span>New Interview Session</span>
           </button>
 
           <button
             type="button"
             onClick={() => setLibraryModalOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-foreground/90 hover:bg-card hover:border-primary/30 active:scale-[0.98] transition-all cursor-pointer"
+            aria-label="Open prompt library and favorites"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-foreground/90 hover:bg-card hover:border-primary/30 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-all cursor-pointer"
           >
-            <Bookmark className="h-3.5 w-3.5 text-primary" />
+            <Bookmark className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             <span>Prompt Library & Favorites</span>
           </button>
         </div>
@@ -339,11 +343,15 @@ export function ThreadSidebar({
 
             {/* Quick Filter Input */}
             <div className="relative mb-2">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground"
+                aria-hidden="true"
+              />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search sessions…"
+                aria-label="Search past sessions"
                 className="h-7 pl-8 text-xs bg-background/50 border-border/60"
               />
             </div>
@@ -364,35 +372,45 @@ export function ThreadSidebar({
                         to="/chat/$threadId"
                         params={{ threadId: t.id }}
                         className={cn(
-                          "flex items-center gap-2 rounded-lg px-2 py-1.5 pr-14 text-xs transition-colors",
+                          "flex items-center gap-2 rounded-lg px-2 py-1.5 pr-16 text-xs transition-colors",
                           isActive
                             ? "bg-accent text-accent-foreground font-medium"
                             : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
                         )}
                       >
-                        <span className="text-sm leading-none shrink-0">
+                        <span
+                          className="text-sm leading-none shrink-0"
+                          aria-hidden="true"
+                        >
                           {expert?.emoji ?? "✨"}
                         </span>
                         <span className="min-w-0 flex-1 truncate">
                           {t.title}
                         </span>
                         {t.isFavorite && (
-                          <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
+                          <Star
+                            className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0"
+                            aria-hidden="true"
+                          />
                         )}
                       </Link>
 
-                      {/* Quick Actions (Pin, Rename, Delete) */}
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Quick Actions (Pin, Rename, Delete) - Visible on touch and hover */}
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         {onToggleFavorite && (
                           <button
                             type="button"
-                            aria-label="Favorite session"
+                            aria-label={
+                              t.isFavorite
+                                ? `Remove favorite for ${t.title}`
+                                : `Mark ${t.title} as favorite`
+                            }
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
                               onToggleFavorite(t.id, !t.isFavorite);
                             }}
-                            className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-amber-400"
+                            className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-amber-400 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                             title={
                               t.isFavorite
                                 ? "Remove favorite"
@@ -405,6 +423,7 @@ export function ThreadSidebar({
                                   ? "fill-amber-400 text-amber-400"
                                   : ""
                               }`}
+                              aria-hidden="true"
                             />
                           </button>
                         )}
@@ -412,22 +431,22 @@ export function ThreadSidebar({
                         {onRename && (
                           <button
                             type="button"
-                            aria-label="Rename session"
+                            aria-label={`Rename session ${t.title}`}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
                               setRenamingThread(t);
                             }}
-                            className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                            className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
                             title="Rename session"
                           >
-                            <Edit2 className="h-3 w-3" />
+                            <Edit2 className="h-3 w-3" aria-hidden="true" />
                           </button>
                         )}
 
                         <button
                           type="button"
-                          aria-label="Delete session"
+                          aria-label={`Delete session ${t.title}`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -435,10 +454,10 @@ export function ThreadSidebar({
                               onDelete(t.id);
                             }
                           }}
-                          className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-destructive"
+                          className="rounded p-1 text-muted-foreground hover:bg-background/80 hover:text-destructive focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
                           title="Delete session"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
                         </button>
                       </div>
                     </li>
@@ -455,7 +474,8 @@ export function ThreadSidebar({
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 bg-background/50 p-2 text-left transition-colors hover:bg-card hover:border-primary/40"
+              aria-label="View account profile and cloud sync status"
+              className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 bg-background/50 p-2 text-left transition-colors hover:bg-card hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               {user.photoURL ? (
                 <img
@@ -473,7 +493,7 @@ export function ThreadSidebar({
                   <span>{user.displayName || "Prompter"}</span>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                  <Cloud className="h-3 w-3" />
+                  <Cloud className="h-3 w-3" aria-hidden="true" />
                   <span>Cloud Synced</span>
                 </div>
               </div>
@@ -482,10 +502,11 @@ export function ThreadSidebar({
             <button
               type="button"
               onClick={() => setAuthModalOpen(true)}
-              className="flex w-full items-center justify-between rounded-xl border border-dashed border-primary/40 bg-primary/5 p-2.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+              aria-label="Sign in or sync account with Google and GitHub"
+              className="flex w-full items-center justify-between rounded-xl border border-dashed border-primary/40 bg-primary/5 p-2.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
             >
               <div className="flex items-center gap-2">
-                <Cloud className="h-4 w-4 text-primary" />
+                <Cloud className="h-4 w-4 text-primary" aria-hidden="true" />
                 <div className="text-left leading-tight">
                   <div className="font-semibold">Sign In / Sync</div>
                   <div className="text-[10px] text-muted-foreground">
