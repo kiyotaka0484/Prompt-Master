@@ -47,7 +47,8 @@
 }
 
 /* Dark theme (default) */
-:root, html.dark {
+:root,
+html.dark {
   --radius: 0.75rem;
 
   --background: oklch(0.16 0.018 270);

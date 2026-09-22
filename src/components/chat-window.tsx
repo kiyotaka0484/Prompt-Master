@@ -26,16 +26,23 @@ import {
   type IntelligenceSignal,
 } from "@/lib/interview-intelligence";
 import { messageText, type ThreadRecord } from "@/lib/threads";
+import {
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_OLLAMA_MODEL,
+  type AIProviderType,
+} from "@/lib/ai-provider";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   AlertTriangle,
   CheckCircle2,
   Circle as HelpCircle,
+  Cpu,
   Layers,
   Lightbulb,
   MessageSquare,
   RotateCcw,
+  Server,
   Sparkles,
   Square,
   Target,
@@ -264,6 +271,27 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const activeExpertId = detectedExpertRef.current ?? thread.expert;
   const expert = activeExpertId ? EXPERTS[activeExpertId] : null;
 
+  // AI Provider Selection: "gemini" (Cloud) or "ollama" (Local qwen3:4b)
+  const [provider, setProvider] = useState<AIProviderType>(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("prompt-master.ai-provider");
+      if (saved === "ollama" || saved === "gemini") return saved;
+    }
+    return "gemini";
+  });
+
+  const handleProviderChange = (newProvider: AIProviderType) => {
+    setProvider(newProvider);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("prompt-master.ai-provider", newProvider);
+    }
+    toast.info(
+      newProvider === "ollama"
+        ? "Switched to Local Ollama (qwen3:4b @ localhost:11434)"
+        : "Switched to Gemini (Cloud AI)",
+    );
+  };
+
   const { messages, sendMessage, status, error, regenerate, clearError, stop } =
     useChat({
       id: thread.id,
@@ -478,7 +506,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
     }
     void sendMessage(
       { text },
-      { body: { expert: detectedExpertRef.current ?? null } },
+      {
+        body: {
+          expert: detectedExpertRef.current ?? null,
+          provider,
+          model:
+            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
+        },
+      },
     );
   }
 
@@ -488,7 +523,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         text: "Why are you asking this? How does my answer affect the final prompt?",
       },
-      { body: { expert: detectedExpertRef.current ?? null } },
+      {
+        body: {
+          expert: detectedExpertRef.current ?? null,
+          provider,
+          model:
+            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
+        },
+      },
     );
   }
 
@@ -499,7 +541,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         text: "Please regenerate all 7 master prompts (ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, Windsurf) using every detail I shared above. Keep each one optimized for its model's unique architecture, and return them in the same seven fenced blocks (```chatgpt, ```claude, ```gemini, ```perplexity, ```grok, ```cursor, ```windsurf) followed by the certificate.",
       },
-      { body: { expert: detectedExpertRef.current } },
+      {
+        body: {
+          expert: detectedExpertRef.current,
+          provider,
+          model:
+            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
+        },
+      },
     );
   }
 
@@ -508,7 +557,12 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
     clearError();
     if (messages.length > 0) {
       void regenerate({
-        body: { expert: detectedExpertRef.current ?? thread.expert ?? null },
+        body: {
+          expert: detectedExpertRef.current ?? thread.expert ?? null,
+          provider,
+          model:
+            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
+        },
       });
     }
   }
@@ -527,7 +581,14 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         text: `Not ready yet — please keep interviewing me. I still need to cover: ${missingLabels}. Ask the next most important question.`,
       },
-      { body: { expert: detectedExpertRef.current } },
+      {
+        body: {
+          expert: detectedExpertRef.current,
+          provider,
+          model:
+            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
+        },
+      },
     );
   }
 
@@ -569,7 +630,43 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
             Bridging human thinking and AI understanding.
           </p>
 
-          <div className="mt-7 w-full">
+          {/* AI Provider Switcher (Gemini Cloud vs Local Ollama qwen3:4b) */}
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Engine:
+            </span>
+            <div className="inline-flex rounded-lg border border-border/80 bg-card/80 p-0.5 shadow-xs">
+              <button
+                type="button"
+                onClick={() => handleProviderChange("gemini")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-all cursor-pointer",
+                  provider === "gemini"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Gemini (Cloud)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProviderChange("ollama")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-all cursor-pointer",
+                  provider === "ollama"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Connects to local Ollama with qwen3:4b on your machine"
+              >
+                <Cpu className="h-3 w-3 text-emerald-400" />
+                <span>Local Ollama (qwen3:4b)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 w-full">
             <ComposerForm
               disabled={isBusy}
               status={status}
@@ -647,6 +744,38 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* AI Engine Switcher */}
+          <div className="flex items-center rounded-lg border border-border/70 bg-card/60 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => handleProviderChange("gemini")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
+                provider === "gemini"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              title="Cloud Gemini Model (gemini-2.5-flash)"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span>Gemini</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleProviderChange("ollama")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
+                provider === "ollama"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              title="Local Ollama Model (qwen3:4b @ localhost:11434)"
+            >
+              <Cpu className="h-3 w-3 text-emerald-400" />
+              <span>Ollama (qwen3:4b)</span>
+            </button>
+          </div>
+
           {/* View Mode Switcher */}
           <div className="flex items-center rounded-lg border border-border/70 bg-card/60 p-0.5 text-xs">
             <button
