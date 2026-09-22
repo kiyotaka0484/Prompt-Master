@@ -66,6 +66,10 @@ export function messageText(m: UIMessage): string {
   return m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
 }
 
+export function messageHasReasoning(m: UIMessage): boolean {
+  return m.parts.some((p) => p.type === "reasoning" && Boolean(p.text));
+}
+
 export function deriveTitle(messages: UIMessage[]): string {
   const firstUser = messages.find(
     (m) => m.role === "user" && detectExpert(messageText(m)),

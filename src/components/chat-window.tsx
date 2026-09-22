@@ -25,7 +25,11 @@ import {
   type InferredFact,
   type IntelligenceSignal,
 } from "@/lib/interview-intelligence";
-import { messageText, type ThreadRecord } from "@/lib/threads";
+import {
+  messageHasReasoning,
+  messageText,
+  type ThreadRecord,
+} from "@/lib/threads";
 import {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_OLLAMA_MODEL,
@@ -322,6 +326,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const lastAssistantRaw = lastAssistant ? messageText(lastAssistant) : "";
   const lastAssistantText = stripSlotTag(lastAssistantRaw);
   const lastSlot = lastAssistant ? parseSlotTag(lastAssistantRaw) : null;
+  const isAssistantReasoning = Boolean(
+    lastAssistant && messageHasReasoning(lastAssistant) && !lastAssistantText,
+  );
   const finalPromptObj = lastAssistant
     ? extractFinalPrompt(
         lastAssistantText,
@@ -957,7 +964,15 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                               </span>
                             </div>
                           )}
-                          <MessageResponse>{cleanText}</MessageResponse>
+                          {!isUser && !cleanText ? (
+                            <Shimmer>
+                              {messageHasReasoning(m)
+                                ? "Consultant is analyzing your goal…"
+                                : "Consultant crafting dynamic question…"}
+                            </Shimmer>
+                          ) : (
+                            <MessageResponse>{cleanText}</MessageResponse>
+                          )}
                         </div>
                         {isUser && (
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
@@ -978,7 +993,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                     {isBusy ? (
                       <div className="flex items-center gap-2">
                         <span className="text-primary font-medium">
-                          Consultant thinking…
+                          {isAssistantReasoning
+                            ? "Consultant is analyzing your goal…"
+                            : "Consultant thinking…"}
                         </span>
                         <button
                           type="button"
@@ -1048,7 +1065,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                     <div className="flex items-center gap-2">
                       <div className="text-[10.5px] text-muted-foreground">
                         {isBusy
-                          ? "Consultant reasoning…"
+                          ? isAssistantReasoning
+                            ? "Consultant is analyzing your goal…"
+                            : "Consultant crafting question…"
                           : "Awaiting your answer"}
                       </div>
                       {isBusy && (
@@ -1065,8 +1084,12 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
                   </div>
                   <div className="p-5">
                     {isBusy && !lastAssistantText ? (
-                      <Shimmer>Consultant crafting dynamic question…</Shimmer>
-                    ) : lastAssistant ? (
+                      <Shimmer>
+                        {isAssistantReasoning
+                          ? "Consultant is analyzing your goal…"
+                          : "Consultant crafting dynamic question…"}
+                      </Shimmer>
+                    ) : lastAssistantText ? (
                       <div className="text-[15px] leading-relaxed">
                         <MessageResponse>{lastAssistantText}</MessageResponse>
                       </div>
