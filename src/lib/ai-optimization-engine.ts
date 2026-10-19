@@ -312,81 +312,90 @@ export function ensureAllSevenModels(
     ]) ||
     "Execute high-impact strategic execution plan";
 
-  const extractedFacts = [
-    ...(context?.facts ?? []),
-    ...extractContextLines(base),
-  ];
+  const extractedFacts = Array.from(
+    new Set([...(context?.facts ?? []), ...extractContextLines(base)]),
+  );
+
+  const resolveModel = (
+    rawPrompt: string | undefined,
+    generator: () => string,
+  ): string => {
+    // If missing or truncated / incomplete (under 200 chars), synthesize complete native prompt
+    if (!rawPrompt || rawPrompt.trim().length < 200) {
+      return generator();
+    }
+    // If prompt is present, ensure all structured interview facts are retained
+    if (extractedFacts.length === 0) {
+      return rawPrompt.trim();
+    }
+    const promptLower = rawPrompt.toLowerCase();
+    const missingFacts = extractedFacts.filter((f) => {
+      const key = f.toLowerCase().split(/[:-]/)[0].trim();
+      return !promptLower.includes(key);
+    });
+    if (missingFacts.length === 0) {
+      return rawPrompt.trim();
+    }
+    return `${rawPrompt.trim()}\n\n# CONFIRMED INTERVIEW REQUIREMENTS & CONTEXT\n${missingFacts.map((f) => `- ${f}`).join("\n")}`;
+  };
 
   return {
-    chatgpt:
-      raw.chatgpt && raw.chatgpt.length > 50
-        ? raw.chatgpt
-        : generateChatGPTNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    claude:
-      raw.claude && raw.claude.length > 50
-        ? raw.claude
-        : generateClaudeNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    gemini:
-      raw.gemini && raw.gemini.length > 50
-        ? raw.gemini
-        : generateGeminiNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    perplexity:
-      raw.perplexity && raw.perplexity.length > 50
-        ? raw.perplexity
-        : generatePerplexityNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    grok:
-      raw.grok && raw.grok.length > 50
-        ? raw.grok
-        : generateGrokNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    cursor:
-      raw.cursor && raw.cursor.length > 50
-        ? raw.cursor
-        : generateCursorNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
-
-    windsurf:
-      raw.windsurf && raw.windsurf.length > 50
-        ? raw.windsurf
-        : generateWindsurfNative(
-            cleanGoal,
-            extractedFacts,
-            context?.expertDomain,
-            context,
-          ),
+    chatgpt: resolveModel(raw.chatgpt, () =>
+      generateChatGPTNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    claude: resolveModel(raw.claude, () =>
+      generateClaudeNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    gemini: resolveModel(raw.gemini, () =>
+      generateGeminiNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    perplexity: resolveModel(raw.perplexity, () =>
+      generatePerplexityNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    grok: resolveModel(raw.grok, () =>
+      generateGrokNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    cursor: resolveModel(raw.cursor, () =>
+      generateCursorNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
+    windsurf: resolveModel(raw.windsurf, () =>
+      generateWindsurfNative(
+        cleanGoal,
+        extractedFacts,
+        context?.expertDomain,
+        context,
+      ),
+    ),
   };
 }
 
@@ -440,7 +449,7 @@ function extractParameters(facts: string[], context?: OptimizationContext) {
   const budgetStr =
     context?.budget ||
     (isZeroBudget
-      ? "$0 Starting Budget (100% Free Tier Services Only — No Billing Activation)"
+      ? "$0 Starting Budget (Zero-cost free-tier architecture; verify provider terms and quotas before deployment)"
       : facts.find((f) => f.toLowerCase().includes("budget")) ||
         "Lean Bootstrapped Budget");
 
@@ -467,13 +476,17 @@ function extractParameters(facts: string[], context?: OptimizationContext) {
       ? "Stripe Payments (Checkout Sessions & Webhook signatures with raw body parsing)"
       : combined.includes("auth")
         ? "Supabase Auth / Firebase Auth (Google OAuth & Email Magic Links; no paid SMS)"
-        : "Standard authenticated API endpoints with environment-variable-backed secrets");
+        : isWebOrApp
+          ? "Standard authenticated API endpoints with environment-variable-backed secrets"
+          : "Domain-specific modern tools and resources");
 
   const hosting =
     context?.hosting ||
-    (isZeroBudget
-      ? "Vercel Hobby Free Tier (100GB/mo bandwidth cap) or Cloudflare Pages (unlimited bandwidth; 500 builds/mo)"
-      : "Vercel / Cloudflare Pages with automated git-push CI/CD deployment");
+    (isWebOrApp
+      ? isZeroBudget
+        ? "Cloudflare Pages (unlimited bandwidth; 500 builds/mo) or Vercel Hobby [VERIFY: commercial eligibility and personal-use restrictions]"
+        : "Vercel / Cloudflare Pages with automated git-push CI/CD deployment"
+      : "Domain-specific publishing and distribution workflow");
 
   return { isZeroBudget, budgetStr, isWebOrApp, stack, integrations, hosting };
 }
@@ -494,14 +507,17 @@ Act as an elite ${role}. You have world-class expertise in technical feasibility
 # PRIMARY OBJECTIVE
 ${goal}
 
+# CONTEXT & CONFIRMED REQUIREMENTS
+${facts.length > 0 ? facts.map((f) => `- ${f}`).join("\n") : "- Execute based on verified operational requirements."}
+
 # TECHNICAL FEASIBILITY & BUDGET CONSTRAINTS
 - **Capital & Budget Limit**: ${budgetStr}
 - **Free-Tier Limits & Quotas**:
   ${
     isZeroBudget
       ? `• Hosting: ${hosting}. Adhere strictly to serverless execution limits (10s execution timeout on hobby tiers).
-  • Database & Storage: Supabase Free Tier (500MB PostgreSQL storage, 50,000 monthly active users for Auth; [VERIFY: 1-week pause policy on inactivity]) or Firebase Spark Free Plan (1GB Firestore stored, 50k reads/day; zero credit card required).
-  • Email/Messaging: Resend Free Tier (3,000 emails/mo, 100/day limit) or zero-cost mailto fallback. Never assume paid SMS or twilio integration.`
+  • Database & Storage: Supabase Free Tier (500MB PostgreSQL storage, 50,000 monthly active users for Auth; [VERIFY: 1-week pause policy on inactivity]) or Firebase Spark Free Plan (1GB Firestore stored, 50k reads/day; zero credit card required). For simple or single-user projects, prioritize client-side storage (IndexedDB / localStorage) to avoid backend costs.
+  • Email/Messaging: Resend Free Tier (3,000 emails/mo, 100/day limit; [VERIFY: requires custom domain DNS verification]) or zero-cost mailto fallback. Never assume paid SMS or twilio integration.`
       : `• Respect operational budgets. Differentiate genuinely free services from trial services requiring credit cards.
   • Keep external API usage within free limits where available.`
   }
@@ -572,8 +588,8 @@ ${goal}
 - Free-Tier Guardrails & Limits:
   ${
     isZeroBudget
-      ? `• Hosting: ${hosting} (Strict 10s serverless function timeout; bandwidth ceiling 100GB/mo).
-  • Database: Supabase free tier (500MB DB storage, 50k MAU Auth; [VERIFY: provider pause policy on inactive projects]).
+      ? `• Hosting: ${hosting} (Strict 10s serverless function timeout; bandwidth ceiling 100GB/mo; [VERIFY: commercial eligibility]).
+  • Database: When persistence is required, consider Supabase free tier (500MB DB storage, 50k MAU Auth; [VERIFY: provider pause policy on inactive projects]). For simple client apps, omit backend database.
   • Never prescribe services requiring credit-card billing activation. Provide zero-cost realistic alternatives for expensive features (e.g. Email magic links instead of SMS; client-side/free API quotas instead of paid GPU clusters).`
       : `• Enforce strict cost ceilings. Separate essential Phase 1 MVP features from optional Phase 2 enhancements.`
   }
@@ -632,8 +648,8 @@ ${facts.map((f) => `  * ${f}`).join("\n") || "  * Production-grade standards; ze
 
 Technical Feasibility & Free-Tier Guardrails:
   - Budget Limit: ${budgetStr}
-  - Service Tiers: ${isZeroBudget ? "100% Free-Tier Services Only (Vercel Hobby, Supabase Free Tier, Resend Free Tier, Gemini API standard free tier). Zero credit-card required services." : "Respect defined budget boundaries."}
-  - Quotas to Monitor: Storage limits (500MB DB), bandwidth limits (100GB/mo), rate limits (15 RPM for free AI models; [VERIFY: provider quota limits]).
+  - Service Tiers: ${isZeroBudget ? "Zero-cost architecture using verified free-tier allowances (e.g. Cloudflare Pages, Supabase Free Tier, Resend Free Tier, Gemini API standard free tier). Note: verify provider terms for commercial projects." : "Respect defined budget boundaries."}
+  - Quotas to Monitor: Storage limits (500MB DB), bandwidth limits (100GB/mo), rate limits (15 RPM for free AI models; [VERIFY: provider quota limits before deployment]).
   - Zero-Cost Fallbacks: Magic links instead of paid SMS; client-side processing where possible; essential Phase 1 MVP separated from optional Phase 2.
   - Secret Key Hygiene: Server-side proxy routing for all private API keys; zero secret leakage in client bundle.
 
@@ -714,7 +730,7 @@ ${facts.map((f) => `  - ${f}`).join("\n") || "  - Start from scratch; optimize f
 
 First-Principles Feasibility Analysis:
 1. Deconstruct the Premise & Budget Math:
-   • ${isZeroBudget ? "The budget is literally $0. Strip away every paid SaaS subscription, managed cluster, and expensive API. Use battle-tested free tiers (Vercel, Supabase, Cloudflare) that require zero credit card to launch." : "Enforce ruthless capital efficiency; eliminate vanity tools."}
+   • ${isZeroBudget ? "The budget is literally $0. Strip away every paid SaaS subscription, managed cluster, and expensive API. Use verified zero-cost tiers (Cloudflare Pages, Supabase free tier; [VERIFY: provider quota limits and terms]) that require zero credit card to launch." : "Enforce ruthless capital efficiency; eliminate vanity tools [VERIFY: provider pricing limits]."}
    • Overengineering Audit: If anyone suggests Kubernetes, Kafka, or microservices for this MVP, reject it immediately. A unified modern stack is 10x faster to build and maintain.
 2. The Brutal Truth on Failure Modes:
    • What is the #1 reason similar builds fail? (Over-scoped features, unvalidated assumptions, broken state handling, leaking API keys).
@@ -745,6 +761,9 @@ function generateCursorNative(
 // Target Project: ${goal}
 // Primary Domain: ${domain || "Full-Stack Software Architecture & Implementation"}
 
+## CONTEXT & CONFIRMED REQUIREMENTS
+${facts.length > 0 ? facts.map((f) => `// - ${f}`).join("\n") : "// - High-standard production architecture"}
+
 ## ARCHITECTURAL BOUNDARIES & TECH STACK
 // - Stack: ${stack}
 // - Integrations: ${integrations}
@@ -752,7 +771,7 @@ function generateCursorNative(
 // - Budget Constraint: ${budgetStr}
 
 ## TECHNICAL FEASIBILITY & FREE-TIER LIMITS
-// 1. Zero-Cost Enforcement: ${isZeroBudget ? "Rely strictly on verified free tiers (e.g. Supabase 500MB DB cap, Vercel Hobby 100GB/mo). Never import libraries requiring paid external services." : "Respect stated project budget."}
+// 1. Zero-Cost Enforcement: ${isZeroBudget ? "Rely strictly on verified free tiers (e.g. Supabase 500MB DB cap, Vercel Hobby 100GB/mo; [VERIFY: commercial use restrictions]). Avoid unneeded external services or paid dependencies." : "Respect stated project budget."}
 // 2. Secret Protection: Never prefix private secrets with public frontend environment variables (e.g. VITE_ or NEXT_PUBLIC_). Route external API calls through server-side proxy handlers.
 // 3. Fallbacks: Provide zero-cost fallbacks for resource-intensive features (e.g. email magic links instead of SMS; client-side search instead of paid clusters).
 
@@ -809,7 +828,7 @@ Verified Constraints & Budget Guardrails:
 
 PHASE 1: RECONNAISSANCE, FREE-TIER & DEPENDENCY AUDIT
 - Inspect existing workspace files, package manifests, and configuration files before modifying code.
-- Audit free-tier limits: verify that required integrations (${integrations}) fit within free allowances (${isZeroBudget ? "zero credit card required" : "budget compliant"}).
+- Audit free-tier limits: verify that required integrations (${integrations}) fit within free allowances (${isZeroBudget ? "verify provider quotas; [VERIFY: provider quota limits and terms]" : "budget compliant; [VERIFY: provider pricing limits]"}).
 - Validate environment variables: inspect .env.example to ensure private keys are isolated from public client bundles.
 - Formulate a deterministic checklist of files to create, edit, or refactor.
 

@@ -24,6 +24,8 @@ import {
   analyzeInterview,
   type InferredFact,
   type IntelligenceSignal,
+  normalizeSlotId,
+  isClarificationOrMetaRequest,
 } from "@/lib/interview-intelligence";
 import { evaluatePromptQuality } from "@/lib/prompt-evaluator";
 import {
@@ -80,16 +82,22 @@ interface Props {
 }
 
 function factMatchesSlot(factId: string, slotId: string): boolean {
-  const f = factId.toLowerCase();
-  const s = slotId.toLowerCase();
-  if (s === "skills" || s === "experience")
-    return f.includes("skills") || f.includes("technical");
-  if (s === "audience") return f.includes("audience");
+  const f = normalizeSlotId(factId);
+  const s = normalizeSlotId(slotId);
+  if (s === f) return true;
+  if (s === "skills" || s === "experience" || s === "tech_stack")
+    return (
+      f.includes("skills") || f.includes("technical") || f.includes("tech")
+    );
+  if (s === "audience" || s === "target_audience")
+    return f.includes("audience");
   if (s === "budget") return f.includes("budget");
   if (s === "purpose" || s === "type")
     return f.includes("site_type") || f.includes("scope");
   if (s === "niche" || s === "format") return f.includes("format");
   if (s === "timeline") return f.includes("timeline");
+  if (s === "hosting") return f.includes("hosting");
+  if (s === "integrations") return f.includes("integrations");
   return false;
 }
 
@@ -105,13 +113,13 @@ function isSpecificAnswer(text: string): boolean {
   return wordCount >= 2 || /\d/.test(t);
 }
 
-const SLOT_TAG_RE = /<!--\s*slot\s*:\s*([a-z0-9_]+)\s*-->/i;
-const SLOT_TAG_GLOBAL_RE = /<!--\s*slot\s*:\s*[a-z0-9_]+\s*-->/gi;
+const SLOT_TAG_RE = /<!--\s*slot\s*:\s*([a-zA-Z0-9_\-\s]+?)\s*-->/i;
+const SLOT_TAG_GLOBAL_RE = /<!--\s*slot\s*:\s*[a-zA-Z0-9_\-\s]+?\s*-->/gi;
 const CERT_BLOCK_RE = /<!--\s*certificate\s*([\s\S]*?)-->/i;
 
 function parseSlotTag(text: string): string | null {
   const m = SLOT_TAG_RE.exec(text);
-  return m ? m[1].toLowerCase() : null;
+  return m ? normalizeSlotId(m[1]) : null;
 }
 
 function stripSlotTag(text: string): string {
@@ -144,7 +152,7 @@ function extractCertificate(
   const evalResult = evaluatePromptQuality(promptToEvaluate, context);
 
   if (!m) {
-    if (promptContent && promptContent.length > 80) {
+    if (promptContent && promptContent.length > 50) {
       return {
         clarity: evalResult.dimensions.clarity.score,
         context: evalResult.dimensions.context.score,
@@ -172,24 +180,50 @@ function extractCertificate(
     return r ? Number(r[1]) : null;
   };
 
-  const clarity = num("clarity") ?? evalResult.dimensions.clarity.score;
-  const contextScore = num("context") ?? evalResult.dimensions.context.score;
-  const constraints =
-    num("constraints") ?? evalResult.dimensions.constraints.score;
-  const audience = num("audience") ?? evalResult.dimensions.audience.score;
-  const output =
-    num("output") ?? evalResult.dimensions.outputRequirements.score;
-  const completeness =
-    num("completeness") ?? evalResult.dimensions.completeness.score;
-  const feasibility =
-    num("feasibility") ??
-    num("technical_feasibility") ??
-    evalResult.dimensions.technicalFeasibility.score;
-  const specificity =
-    num("specificity") ??
-    num("implementation_specificity") ??
-    evalResult.dimensions.implementationSpecificity.score;
-  const overall = num("overall") ?? evalResult.overallScore;
+  // Honest scoring validator: Never blindly trust a self-reported score that inflates
+  // above what the evidence-backed evaluation rules measured.
+  const validateDim = (reported: number | null, evalScore: number): number => {
+    if (reported === null || isNaN(reported) || reported < 0 || reported > 10) {
+      return evalScore;
+    }
+    return Math.min(Number(reported.toFixed(1)), evalScore);
+  };
+
+  const clarity = validateDim(
+    num("clarity"),
+    evalResult.dimensions.clarity.score,
+  );
+  const contextScore = validateDim(
+    num("context"),
+    evalResult.dimensions.context.score,
+  );
+  const constraints = validateDim(
+    num("constraints"),
+    evalResult.dimensions.constraints.score,
+  );
+  const audience = validateDim(
+    num("audience"),
+    evalResult.dimensions.audience.score,
+  );
+  const output = validateDim(
+    num("output"),
+    evalResult.dimensions.outputRequirements.score,
+  );
+  const completeness = validateDim(
+    num("completeness"),
+    evalResult.dimensions.completeness.score,
+  );
+  const feasibility = validateDim(
+    num("feasibility") ?? num("technical_feasibility"),
+    evalResult.dimensions.technicalFeasibility.score,
+  );
+  const specificity = validateDim(
+    num("specificity") ?? num("implementation_specificity"),
+    evalResult.dimensions.implementationSpecificity.score,
+  );
+
+  // Overall score is derived from actual prompt evaluation (zero self-reported inflation)
+  const overall = evalResult.overallScore;
 
   const revisions = num("revisions") ?? 1;
   const assumpRaw = /assumptions\s*:\s*(.+)/i.exec(body)?.[1]?.trim() ?? "";
@@ -240,8 +274,14 @@ const ANY_FENCE_RE = /```(?:prompt|markdown|md|text)?\s*\n?([\s\S]*?)```/i;
 
 function extractFinalPrompt(
   text: string,
-  goal?: string,
-  expertDomain?: string,
+  context?: {
+    goal?: string;
+    expertDomain?: string;
+    facts?: string[];
+    pairs?: Array<{ question: string; answer: string; slot?: string | null }>;
+    inferredFacts?: Array<{ label: string; value: string }>;
+    budget?: string;
+  },
 ): { intro: string; prompts: MultiModelPrompts; outro: string } | null {
   const found: Partial<Record<ModelKey, string>> = {};
   let firstIndex = Infinity;
@@ -257,9 +297,33 @@ function extractFinalPrompt(
     lastEnd = Math.max(lastEnd, m.index + m[0].length);
   }
 
+  // Preserve interview context into structured facts
+  const structuredFacts: string[] = [...(context?.facts ?? [])];
+
+  if (context?.pairs) {
+    for (const pair of context.pairs) {
+      if (pair.question && pair.answer) {
+        structuredFacts.push(`${pair.question}: ${pair.answer}`);
+      }
+    }
+  }
+
+  if (context?.inferredFacts) {
+    for (const inf of context.inferredFacts) {
+      structuredFacts.push(`${inf.label}: ${inf.value} (Inferred)`);
+    }
+  }
+
+  const optContext = {
+    goal: context?.goal,
+    expertDomain: context?.expertDomain,
+    budget: context?.budget,
+    facts: Array.from(new Set(structuredFacts)),
+  };
+
   // If one or more model fences were detected, ensure all 7 models are populated
   if (Object.keys(found).length > 0) {
-    const resolved = ensureAllSevenModels(found, { goal, expertDomain });
+    const resolved = ensureAllSevenModels(found, optContext);
     return {
       intro: stripCertificate(text.slice(0, firstIndex)).trim(),
       prompts: resolved,
@@ -271,10 +335,7 @@ function extractFinalPrompt(
   const legacy = ANY_FENCE_RE.exec(text);
   if (legacy && legacy[1].trim().length >= 80) {
     const prompt = legacy[1].trim();
-    const resolved = ensureAllSevenModels(
-      { chatgpt: prompt },
-      { goal, expertDomain },
-    );
+    const resolved = ensureAllSevenModels({ chatgpt: prompt }, optContext);
     return {
       intro: stripCertificate(text.slice(0, legacy.index)).trim(),
       prompts: resolved,
@@ -360,21 +421,9 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const isAssistantReasoning = Boolean(
     lastAssistant && messageHasReasoning(lastAssistant) && !lastAssistantText,
   );
-  const finalPromptObj = lastAssistant
-    ? extractFinalPrompt(
-        lastAssistantText,
-        goal,
-        activeExpertId ?? goalEntry?.expert ?? undefined,
-      )
-    : null;
-  const certificate = lastAssistant
-    ? extractCertificate(lastAssistantRaw)
-    : null;
-  const hasFinalPrompt = !!finalPromptObj;
-
   const [viewMode, setViewMode] = useState<"focus" | "stream">("focus");
 
-  // Build Q→A pairs (skip any greeting/triage messages and the goal itself).
+  // Build Q→A pairs (skip any greeting/triage messages, the goal itself, and clarification requests).
   const pairs: {
     question: string;
     answer: string;
@@ -389,9 +438,12 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       .find((m) => m.role === "assistant");
     if (!prevAssistant) continue;
     const qTextRaw = messageText(prevAssistant);
+    const userAns = messageText(userMessages[i]);
+    // Skip clarification questions so they do not falsely count as slot answers
+    if (isClarificationOrMetaRequest(userAns)) continue;
     pairs.push({
       question: shortQuestion(qTextRaw),
-      answer: messageText(userMessages[i]),
+      answer: userAns,
       n: questionNumber(qTextRaw),
       slot: parseSlotTag(qTextRaw),
     });
@@ -417,7 +469,8 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
 
   // Evaluate slots: satisfied either by direct answer OR intelligent inference
   const slotStatuses: SlotStatus[] = expertSlots.map((s) => {
-    const match = pairs.find((p) => p.slot === s.id);
+    const normId = normalizeSlotId(s.id);
+    const match = pairs.find((p) => normalizeSlotId(p.slot) === normId);
     if (match) {
       return {
         id: s.id,
@@ -452,11 +505,40 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   });
 
   const satisfiedSlotIds = new Set(
-    slotStatuses.filter((s) => s.filled).map((s) => s.id),
+    slotStatuses.filter((s) => s.filled).map((s) => normalizeSlotId(s.id)),
   );
   const missingCritical = criticalSlotIds.filter(
-    (id) => !satisfiedSlotIds.has(id),
+    (id) => !satisfiedSlotIds.has(normalizeSlotId(id)),
   );
+
+  const budgetAnswer = pairs.find(
+    (p) => normalizeSlotId(p.slot) === "budget",
+  )?.answer;
+
+  const finalPromptObj = lastAssistant
+    ? extractFinalPrompt(lastAssistantText, {
+        goal,
+        expertDomain: activeExpertId ?? goalEntry?.expert ?? undefined,
+        pairs,
+        inferredFacts,
+        budget: budgetAnswer,
+      })
+    : null;
+
+  const primaryPrompt = finalPromptObj
+    ? finalPromptObj.prompts.gemini ||
+      finalPromptObj.prompts.chatgpt ||
+      Object.values(finalPromptObj.prompts)[0] ||
+      lastAssistantText
+    : lastAssistantText;
+
+  const certificate = lastAssistant
+    ? extractCertificate(lastAssistantRaw, primaryPrompt, {
+        goal,
+        budget: budgetAnswer,
+      })
+    : null;
+  const hasFinalPrompt = !!finalPromptObj;
 
   const understanding = isIntentDiscovery
     ? 0
@@ -477,10 +559,20 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       (satisfiedSlotIds.size >= 4 && missingCritical.length === 0));
   const showFinalPrompt = hasFinalPrompt && (ready || understanding >= 60);
 
-  // Prompt Quality Score (0-10): completeness (4) + critical coverage (4) + specificity (2).
+  // Prompt Quality Score (0-10): completeness (4) + critical coverage (4) + specificity (2) during interview,
+  // or actual evaluated prompt score once final prompt is generated.
   const quality = (() => {
     if (isIntentDiscovery || expertSlots.length === 0) return 0;
-    if (hasFinalPrompt && ready) return 10;
+    if (hasFinalPrompt && finalPromptObj) {
+      if (certificate) {
+        return certificate.overall;
+      }
+      const evaluated = evaluatePromptQuality(primaryPrompt, {
+        goal,
+        budget: budgetAnswer,
+      });
+      return evaluated.overallScore;
+    }
     const completeness = satisfiedSlotIds.size / expertSlots.length; // 0..1
     const criticality =
       criticalSlotIds.length === 0
@@ -488,7 +580,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
         : (criticalSlotIds.length - missingCritical.length) /
           criticalSlotIds.length;
     const filledPairs = pairs.filter(
-      (p) => p.slot && satisfiedSlotIds.has(p.slot),
+      (p) => p.slot && satisfiedSlotIds.has(normalizeSlotId(p.slot)),
     );
     const specificity =
       filledPairs.length === 0
@@ -691,7 +783,7 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   }
 
   const currentQuestionNumber = lastAssistant
-    ? (questionNumber(lastAssistantText) ?? userMessages.length + 1)
+    ? (questionNumber(lastAssistantText) ?? pairs.length + 1)
     : 1;
 
   // -------- INTERVIEW MODE --------

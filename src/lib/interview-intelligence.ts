@@ -42,6 +42,50 @@ export interface IntelligenceAnalysis {
   questionNumber: number;
 }
 
+/**
+ * Normalizes slot names consistently across hyphens, spaces, and underscores.
+ */
+export function normalizeSlotId(slot: string | null | undefined): string {
+  if (!slot) return "";
+  return slot
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_]+/g, "_");
+}
+
+/**
+ * Matches slot tags with hyphens, underscores, or spaces, e.g. <!--slot:tech-stack-->
+ */
+export const SLOT_TAG_RE = /<!--\s*slot\s*:\s*([a-zA-Z0-9_\-\s]+?)\s*-->/i;
+
+/**
+ * Detects whether a user message is requesting clarification, explanation, or meta-guidance
+ * rather than answering an interview slot question.
+ */
+export function isClarificationOrMetaRequest(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim().toLowerCase();
+  return (
+    t.startsWith("why are you asking") ||
+    t.includes("why am i being asked") ||
+    t.startsWith("what does this mean") ||
+    t.startsWith("what does that mean") ||
+    t.startsWith("can you explain") ||
+    t.startsWith("could you explain") ||
+    t.startsWith("what is ") ||
+    t.startsWith("what are ") ||
+    t.includes("i don't understand") ||
+    t.includes("i dont understand") ||
+    t.includes("explain this to me") ||
+    t.includes("tell me more about what you mean") ||
+    (t.endsWith("?") &&
+      (t.includes("mean") ||
+        t.includes("why") ||
+        t.includes("explain") ||
+        t.includes("clarif")))
+  );
+}
+
 const VAGUE_WORDS = new Set([
   "money",
   "income",
@@ -1137,7 +1181,6 @@ export function analyzeInterview(
     value: string;
     slotId?: string;
   }> = [];
-  const SLOT_TAG_RE = /<!--\s*slot\s*:\s*([a-z0-9_]+)\s*-->/i;
 
   for (let i = 0; i < assistantMessages.length; i++) {
     const ast = assistantMessages[i];
@@ -1147,12 +1190,19 @@ export function analyzeInterview(
     const nextUser = messages.slice(astIdx + 1).find((m) => m.role === "user");
 
     if (tagMatch && nextUser) {
-      const slotId = tagMatch[1].toLowerCase();
-      const slotDef = expert?.slots.find((s) => s.id === slotId);
+      const userAns = messageText(nextUser).trim();
+      // Clarification requests (e.g. "Why am I being asked this?") do not answer the slot
+      if (isClarificationOrMetaRequest(userAns)) {
+        continue;
+      }
+      const slotId = normalizeSlotId(tagMatch[1]);
+      const slotDef = expert?.slots.find(
+        (s) => normalizeSlotId(s.id) === slotId,
+      );
       confirmedFacts.push({
         slotId,
         label: slotDef?.label ?? slotId,
-        value: messageText(nextUser).trim(),
+        value: userAns,
       });
     }
   }
@@ -1217,7 +1267,9 @@ export function analyzeInterview(
   const criticalSlots = expert?.criticalSlots ?? [];
   const criticalAnsweredCount = criticalSlots.filter(
     (id) =>
-      confirmedFacts.some((f) => f.slotId === id) ||
+      confirmedFacts.some(
+        (f) => normalizeSlotId(f.slotId) === normalizeSlotId(id),
+      ) ||
       inferredFacts.some((f) => f.id.includes(id) || factMatchesSlot(f, id)),
   ).length;
   const criticalRatio =
@@ -1283,18 +1335,20 @@ export function analyzeInterview(
     unnecessaryTopics,
     readinessScore,
     isReadyForMasterPrompt,
-    questionNumber: userMessages.length,
+    questionNumber: confirmedFacts.length,
   };
 }
 
 function factMatchesSlot(fact: InferredFact, slotId: string): boolean {
-  const f = fact.id.toLowerCase();
-  const s = slotId.toLowerCase();
+  const f = normalizeSlotId(fact.id);
+  const s = normalizeSlotId(slotId);
+  if (s === f) return true;
   if (s === "skills" || s === "experience" || s === "tech_stack")
     return (
       f.includes("skills") || f.includes("technical") || f.includes("tech")
     );
-  if (s === "audience") return f.includes("audience");
+  if (s === "audience" || s === "target_audience")
+    return f.includes("audience");
   if (s === "budget") return f.includes("budget");
   if (s === "purpose" || s === "type")
     return f.includes("site_type") || f.includes("scope");
@@ -1378,8 +1432,7 @@ READINESS SCORE: ${analysis.readinessScore}% (Master Prompt Threshold: 80%+)
 • **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), provide 2-4 concrete, real-world anchors or options to help them decide.
 • **DETECT UNREALISTIC EXPECTATIONS**: Validate ambition while grounding the scope into an achievable Phase 1 MVP.
 • **DETECT KNOWLEDGE GAPS**: Share a crisp 1-sentence consultant insight before framing your next question.
-• **ASK CLARIFICATION QUESTIONS ONLY WHEN NECESSARY**: If an answer is clear enough to formulate a high-yield prompt, accept it and advance.
-• **NEVER ASK UNNECESSARY QUESTIONS**: Do not ask about topics that are already known, inferred, or irrelevant to the master prompt.
+• **HANDLE CLARIFICATION REQUESTS GRACEFULLY**: If the user asks "Why am I being asked this?", asks what a technical term means, or requests clarification, explain the concept warmly in 1-2 plain-English sentences and re-frame the current question (Question ${analysis.questionNumber + 1}) with concrete options without skipping or double-incrementing.
 • **OPTIMIZE FOR NATURAL CONVERSATION**: Speak in a warm, curious, and professional tone. Keep response quality exceptionally high.
 
 ## 2. INFORMATION ALREADY INFERRED BY INTELLIGENCE (DO NOT ASK REDUNDANT QUESTIONS!):
