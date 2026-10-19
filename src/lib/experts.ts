@@ -273,9 +273,12 @@ constraints: <0-10, one decimal>
 audience: <0-10, one decimal>
 output: <0-10, one decimal>
 completeness: <0-10, one decimal>
+feasibility: <0-10, one decimal>
+specificity: <0-10, one decimal>
 overall: <0-10, one decimal>
 revisions: <integer number of improvement passes you ran, at least 1>
 assumptions: <semicolon-separated list, or "none">
+weaknesses: <concise actionable feedback on any dimension below 9.5, or "none">
 -->
 
 4. One short closing line offering to refine further.
@@ -283,6 +286,9 @@ assumptions: <semicolon-separated list, or "none">
 Each prompt must:
 - Be self-contained (the receiving AI has zero context from this conversation).
 - Include: role/persona, the user's goal, all relevant constraints from the interview, desired output format, success criteria, and tone.
+- TECHNICAL FEASIBILITY: Explicitly respect budget (including $0 budget); identify free-tier limits/quotas and deployment constraints; distinguish genuinely free services from billing-required or trial services; specify required integrations with purpose and config; provide realistic zero-cost alternatives for heavy features; separate essential Phase 1 MVP from optional Phase 2 enhancements; mark unverified limits with [VERIFY: ...].
+- IMPLEMENTATION SPECIFICITY: Define exact tech stack, tools, frameworks, and libraries; detail component interactions; specify required pages, user flows, data models/schemas, and edge cases; mandate input validation, loading skeletons, empty states, error handling; provide setup steps, .env.example with public vs secret classification; define concrete deliverables, Definition of Done, and testable acceptance criteria with testing requirements.
+- Never use vague phrases such as "make it modern," "ensure security," or "add proper error handling."
 - Naturally weave in any interesting facts the user shared during the interview — do not drop them.
 - Be written in the user's language.
 - Feel NATIVE to its model's strengths (see block descriptions above). NEVER generate identical prompts across models.
@@ -398,16 +404,34 @@ const WEBSITE_SLOTS: Slot[] = [
     why: "Sets whether the prompt should target no-code, low-code, or full-code tooling.",
   },
   {
-    id: "hosting",
-    label: "Hosting & Domain",
-    priority: "optional",
-    why: "Helps the AI recommend a realistic launch path.",
+    id: "tech_stack",
+    label: "Preferred Tech Stack",
+    priority: "important",
+    why: "Specifies exact frameworks, libraries, database, and auth to prevent overengineering.",
   },
   {
     id: "budget",
-    label: "Budget",
+    label: "Budget & Free-Tier Constraints",
+    priority: "important",
+    why: "Enforces verified free-tier limits, quotas, and realistic zero-cost services for $0 budgets.",
+  },
+  {
+    id: "integrations",
+    label: "External Integrations & APIs",
+    priority: "important",
+    why: "Defines payment, auth, database, AI, or third-party API dependencies and secret security.",
+  },
+  {
+    id: "hosting",
+    label: "Hosting & Deployment Target",
+    priority: "important",
+    why: "Determines deployment platform, environment variables, and production configuration.",
+  },
+  {
+    id: "acceptance_criteria",
+    label: "Deliverables & Acceptance Criteria",
     priority: "optional",
-    why: "Filters out tooling and services you can't justify.",
+    why: "Establishes concrete definition of done and testable pass/fail verification criteria.",
   },
 ];
 

@@ -1,12 +1,10 @@
 import {
   DEFAULT_GEMINI_MODEL,
-  DEFAULT_OLLAMA_MODEL,
   getModel,
   getProviderErrorMessage,
   isAIProviderError,
   sanitizeAIErrorMessage,
   validateApiKey,
-  type AIProviderType,
 } from "@/lib/ai-provider";
 import {
   EXPERTS,
@@ -24,11 +22,10 @@ import { convertToModelMessages, streamText, type UIMessage } from "ai";
 type ChatRequestBody = {
   messages?: unknown;
   expert?: ExpertId | null;
-  provider?: AIProviderType;
   model?: string;
 };
 
-// Explicit behavioral guidance for local models like qwen3:4b
+// Core behavioral instructions for Prompt Master
 const PROMPT_MASTER_CORE_INSTRUCTION = `
 You are the AI core of Prompt Master, a specialized software application that helps users craft high-impact AI prompts through interactive interviewing.
 Your primary mission:
@@ -55,12 +52,7 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Invalid JSON request body", { status: 400 });
         }
 
-        const {
-          messages,
-          expert,
-          provider = "gemini",
-          model: requestedModel,
-        } = body;
+        const { messages, expert, model: requestedModel } = body;
         if (!Array.isArray(messages) || messages.length === 0) {
           return new Response(
             "Messages array is required and cannot be empty",
@@ -100,23 +92,19 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
-        // Validate API key if using Gemini provider. Local Ollama does not require Google API key.
-        if (provider === "gemini") {
-          const keyValidation = validateApiKey();
-          if (!keyValidation.valid && keyValidation.error) {
-            return new Response(getProviderErrorMessage(keyValidation.error), {
-              status: 503,
-            });
-          }
+        // Validate Gemini API key
+        const keyValidation = validateApiKey();
+        if (!keyValidation.valid && keyValidation.error) {
+          return new Response(getProviderErrorMessage(keyValidation.error), {
+            status: 503,
+          });
         }
 
-        // Resolve exact model name without renaming
-        const modelId =
-          requestedModel ||
-          (provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL);
+        // Resolve Gemini model
+        const modelId = requestedModel || DEFAULT_GEMINI_MODEL;
 
         try {
-          const model = getModel({ provider, model: modelId });
+          const model = getModel({ model: modelId });
           const result = streamText({
             model,
             system: systemPrompt,
@@ -126,12 +114,12 @@ export const Route = createFileRoute("/api/chat")({
           return result.toUIMessageStreamResponse({
             originalMessages: messages as UIMessage[],
             onError(error: unknown) {
-              console.error(`[api/chat ${provider} stream error]`, error);
+              console.error("[api/chat gemini stream error]", error);
               return sanitizeAIErrorMessage(error);
             },
           });
         } catch (err) {
-          console.error(`[api/chat ${provider} execution error]`, err);
+          console.error("[api/chat gemini execution error]", err);
           const safeMessage = sanitizeAIErrorMessage(err);
 
           let status = 500;

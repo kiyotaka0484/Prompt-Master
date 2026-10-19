@@ -289,7 +289,7 @@ export const ALL_MODELS: ModelOptimizationProfile[] = [
  */
 export function ensureAllSevenModels(
   raw: Partial<MultiModelPrompts>,
-  context?: { goal?: string; expertDomain?: string },
+  context?: OptimizationContext,
 ): MultiModelPrompts {
   // Find a base prompt to extract facts and constraints from
   const base =
@@ -312,7 +312,10 @@ export function ensureAllSevenModels(
     ]) ||
     "Execute high-impact strategic execution plan";
 
-  const extractedFacts = extractContextLines(base);
+  const extractedFacts = [
+    ...(context?.facts ?? []),
+    ...extractContextLines(base),
+  ];
 
   return {
     chatgpt:
@@ -322,6 +325,7 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
 
     claude:
@@ -331,6 +335,7 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
 
     gemini:
@@ -340,6 +345,7 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
 
     perplexity:
@@ -349,12 +355,18 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
 
     grok:
       raw.grok && raw.grok.length > 50
         ? raw.grok
-        : generateGrokNative(cleanGoal, extractedFacts, context?.expertDomain),
+        : generateGrokNative(
+            cleanGoal,
+            extractedFacts,
+            context?.expertDomain,
+            context,
+          ),
 
     cursor:
       raw.cursor && raw.cursor.length > 50
@@ -363,6 +375,7 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
 
     windsurf:
@@ -372,55 +385,181 @@ export function ensureAllSevenModels(
             cleanGoal,
             extractedFacts,
             context?.expertDomain,
+            context,
           ),
   };
+}
+
+/**
+ * Convenience function to generate optimized prompts for all 7 AI models
+ */
+export function generateOptimizedPrompts(
+  goal: string,
+  facts: string[] = [],
+  expertDomain?: string,
+  context?: OptimizationContext,
+): MultiModelPrompts {
+  return ensureAllSevenModels(
+    {},
+    {
+      ...context,
+      goal,
+      expertDomain: expertDomain ?? context?.expertDomain,
+      facts,
+    },
+  );
 }
 
 // ----------------------------------------------------------------------------
 // Model-Specific Native Format Generators
 // ----------------------------------------------------------------------------
 
+export interface OptimizationContext {
+  goal?: string;
+  expertDomain?: string;
+  budget?: string;
+  techStack?: string;
+  integrations?: string;
+  hosting?: string;
+  audience?: string;
+  userExperience?: "beginner" | "intermediate" | "advanced";
+  facts?: string[];
+}
+
+function extractParameters(facts: string[], context?: OptimizationContext) {
+  const combined = facts.join(" ").toLowerCase();
+  const isZeroBudget =
+    context?.budget?.includes("$0") ||
+    context?.budget?.toLowerCase().includes("free") ||
+    combined.includes("$0") ||
+    combined.includes("zero budget") ||
+    combined.includes("no budget") ||
+    combined.includes("free tier") ||
+    combined.includes("shoestring");
+
+  const budgetStr =
+    context?.budget ||
+    (isZeroBudget
+      ? "$0 Starting Budget (100% Free Tier Services Only — No Billing Activation)"
+      : facts.find((f) => f.toLowerCase().includes("budget")) ||
+        "Lean Bootstrapped Budget");
+
+  const isWebOrApp =
+    (context?.expertDomain || "").toLowerCase().includes("web") ||
+    (context?.expertDomain || "").toLowerCase().includes("app") ||
+    combined.includes("website") ||
+    combined.includes("web app") ||
+    combined.includes("saas") ||
+    combined.includes("portfolio") ||
+    combined.includes("react");
+
+  const stack =
+    context?.techStack ||
+    (combined.includes("next")
+      ? "Next.js 15 (App Router), TypeScript, Tailwind CSS v4, Lucide React, TanStack Query, Drizzle ORM, Supabase/PostgreSQL"
+      : isWebOrApp
+        ? "Vite + React 19, TypeScript, Tailwind CSS v4, Lucide React, TanStack Query, Zod for validation, Supabase/Firebase free tier"
+        : "Domain-specific modern execution stack");
+
+  const integrations =
+    context?.integrations ||
+    (combined.includes("stripe")
+      ? "Stripe Payments (Checkout Sessions & Webhook signatures with raw body parsing)"
+      : combined.includes("auth")
+        ? "Supabase Auth / Firebase Auth (Google OAuth & Email Magic Links; no paid SMS)"
+        : "Standard authenticated API endpoints with environment-variable-backed secrets");
+
+  const hosting =
+    context?.hosting ||
+    (isZeroBudget
+      ? "Vercel Hobby Free Tier (100GB/mo bandwidth cap) or Cloudflare Pages (unlimited bandwidth; 500 builds/mo)"
+      : "Vercel / Cloudflare Pages with automated git-push CI/CD deployment");
+
+  return { isZeroBudget, budgetStr, isWebOrApp, stack, integrations, hosting };
+}
+
 function generateChatGPTNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
   const role = getDomainRole(domain);
+  const { isZeroBudget, budgetStr, isWebOrApp, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `# ROLE & IDENTITY
-Act as an elite ${role}. You have world-class expertise in strategic execution, high-yield architectures, and operational excellence.
+Act as an elite ${role}. You have world-class expertise in technical feasibility, software architecture, and production delivery.
 
 # PRIMARY OBJECTIVE
 ${goal}
 
-# CORE CONSTRAINTS & PROJECT PARAMETERS
-${facts.map((f) => `- ${f}`).join("\n") || "- Apply maximum industry best practices and strict feasibility filters."}
+# TECHNICAL FEASIBILITY & BUDGET CONSTRAINTS
+- **Capital & Budget Limit**: ${budgetStr}
+- **Free-Tier Limits & Quotas**:
+  ${
+    isZeroBudget
+      ? `• Hosting: ${hosting}. Adhere strictly to serverless execution limits (10s execution timeout on hobby tiers).
+  • Database & Storage: Supabase Free Tier (500MB PostgreSQL storage, 50,000 monthly active users for Auth; [VERIFY: 1-week pause policy on inactivity]) or Firebase Spark Free Plan (1GB Firestore stored, 50k reads/day; zero credit card required).
+  • Email/Messaging: Resend Free Tier (3,000 emails/mo, 100/day limit) or zero-cost mailto fallback. Never assume paid SMS or twilio integration.`
+      : `• Respect operational budgets. Differentiate genuinely free services from trial services requiring credit cards.
+  • Keep external API usage within free limits where available.`
+  }
+- **Realistic Zero-Cost Alternatives**:
+  • Use email magic links or WebAuthn instead of paid SMS gateways.
+  • Use client-side WebGPU / free Google Gemini API quotas (15 RPM free tier) instead of dedicated GPU clusters.
+  • Distinguish essential Phase 1 MVP features from optional Phase 2 enhancements.
+- **Environment Variables & Secrets Security**:
+  • All private API keys must remain strictly server-side (never prefixed with public bundler prefixes like VITE_).
+  • Include a documented \`.env.example\` with public vs secret classifications.
 
-# OPERATIONAL PROTOCOL
-1. Analyze the objective through the lens of first-principles viability and market readiness.
-2. Formulate a cohesive, non-generic execution blueprint with measurable milestones.
-3. Detail exact tools, frameworks, and resource allocations required.
-4. Highlight common points of failure and provide preemptive counter-measures.
+# EXACT TECHNOLOGY STACK & ARCHITECTURE
+- **Frontend & UI**: ${stack}
+- **State Management & Data Fetching**: TanStack Query (React Query) for server state caching and optimistic updates.
+- **Validation**: Zod runtime schema validation on all user forms and incoming network payloads.
+- **Icons & Styling**: Lucide React icons, Tailwind CSS v4 utility classes.
+- **Integrations**: ${integrations}
 
-# REQUIRED DELIVERABLE FORMAT
-Structure your response cleanly using Markdown:
-- **Executive Summary**: 2-3 sentences framing the core leverage point.
-- **Strategic Architecture Matrix**: A Markdown table with columns [Phase, Key Milestones, Primary Deliverable, Verification Metric].
-- **Deep-Dive Action Plan**: Numbered, exhaustive operational instructions.
-- **Risk Mitigation Guardrails**: Bulleted checklist of strict non-negotiables.`;
+# FUNCTIONAL REQUIREMENTS & USER JOURNEYS
+- **FR-1 (Core Onboarding / Entry)**: Immediate value delivery within 10 seconds of landing.
+- **FR-2 (Primary User Flow)**: Interactive workspace with instant feedback, live preview, and validation.
+- **FR-3 (Data Persistence & Export)**: Reliable save/load mechanism with local fallback (localStorage/IndexedDB) when offline.
+- **Edge Cases**: Empty input submission, offline network disconnection, rate-limit 429 throttling, and malformed server payloads.
+
+# UX STATES & OPERATIONAL PROTOCOL
+1. **Input Validation**: Real-time inline feedback via Zod schema parsing; disable submit buttons until inputs are valid.
+2. **Loading States**: Layout-matched skeleton placeholders; spinners with descriptive progress text during async actions.
+3. **Empty States**: High-contrast guidance cards with direct primary action button (no blank screens).
+4. **Error Handling**: React Error Boundaries wrapping page roots, toast notifications for transient failures, and retry triggers.
+5. **Accessibility & Responsive**: Full WCAG AA color contrast compliance, keyboard navigation, and mobile viewport adaptability (375px+).
+
+# DELIVERABLES, DEFINITION OF DONE & ACCEPTANCE CRITERIA
+- **Concrete Deliverables**: Complete production source code, \`.env.example\`, README with setup commands, and unit tests.
+- **Definition of Done (DoD)**:
+  1. Zero TypeScript errors (\`tsc --noEmit\` exits 0).
+  2. Zero secrets exposed in browser client bundles.
+  3. All user flows verified end-to-end with loading, empty, and error fallback states.
+- **Testable Acceptance Criteria**:
+  • GIVEN a new user enters valid inputs, WHEN they click submit, THEN the state transitions to loading and displays results within 1.5s.
+  • GIVEN an empty or invalid form, WHEN submitted, THEN field-level validation errors highlight the exact issue without a network call.`;
 }
 
 function generateClaudeNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
   const role = getDomainRole(domain);
+  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `<role>
-You are an expert ${role} celebrated for intellectual rigor, nuanced strategic analysis, and clear architectural vision.
+You are an expert ${role} celebrated for intellectual rigor, technical feasibility, and nuanced architectural design.
 </role>
 
 <context>
-The following verified facts, constraints, and environmental context govern this initiative:
+The following verified facts, constraints, and operational context govern this initiative:
 ${facts.map((f) => `• ${f}`).join("\n") || "• Target production-grade excellence with realistic operational constraints."}
 </context>
 
@@ -428,51 +567,107 @@ ${facts.map((f) => `• ${f}`).join("\n") || "• Target production-grade excell
 ${goal}
 </goal>
 
-<instructions>
-1. Begin your response by thinking through the strategic implications, trade-offs, and edge cases inside <thinking>...</thinking> tags.
-2. Formulate a comprehensive, beautifully reasoned action strategy that directly addresses the nuances outlined in <context>.
-3. Favor depth over superficial bullet points. Articulate the underlying rationale behind every recommendation so I understand why this path was chosen over alternatives.
-4. Weave practical guardrails throughout: call out subtle pitfalls, resource bottlenecks, and non-obvious leverage opportunities.
-</instructions>
+<technical_feasibility>
+- Budget Constraint: ${budgetStr}
+- Free-Tier Guardrails & Limits:
+  ${
+    isZeroBudget
+      ? `• Hosting: ${hosting} (Strict 10s serverless function timeout; bandwidth ceiling 100GB/mo).
+  • Database: Supabase free tier (500MB DB storage, 50k MAU Auth; [VERIFY: provider pause policy on inactive projects]).
+  • Never prescribe services requiring credit-card billing activation. Provide zero-cost realistic alternatives for expensive features (e.g. Email magic links instead of SMS; client-side/free API quotas instead of paid GPU clusters).`
+      : `• Enforce strict cost ceilings. Separate essential Phase 1 MVP features from optional Phase 2 enhancements.`
+  }
+- Secrets Management: Isolate all private secrets to server environments; provide .env.example with public vs secret classification.
+</technical_feasibility>
 
-<output_requirements>
-- Natural, sophisticated prose organized by clear semantic headings.
-- Explicit step-by-step reasoning that connects user constraints directly to concrete outcomes.
-- No patronizing preambles; begin immediately with your structured thinking and executive analysis.
-</output_requirements>`;
+<technology_stack>
+- Core Framework: ${stack}
+- Data Validation: Zod schema parsing across all network and form boundaries.
+- Component Architecture: Modular, single-responsibility components with clean separation between business logic, state stores, and UI view layers.
+- Integrations: ${integrations}
+</technology_stack>
+
+<functional_specifications>
+- Primary Pages & Routes: Landing/Welcome view, Core Interactive Workspace, Settings/Configuration drawer, and Saved Artifacts view.
+- User Flows: Guided workflow with step-by-step progress, auto-save persistence, and instant export.
+- State Handling:
+  • Loading: Shimmer skeleton placeholders matching layout geometry.
+  • Empty States: Clear instructional prompt with a primary call-to-action button.
+  • Error States: Localized try/catch error boundaries with actionable toast alerts and retry buttons.
+- Edge Cases: Network timeout, malformed payloads, rate-limit throttling (HTTP 429), and mobile screen breakpoints.
+</functional_specifications>
+
+<acceptance_criteria_and_dod>
+- Definition of Done (DoD):
+  1. Build succeeds with zero TypeScript errors or broken imports.
+  2. All forms validate with Zod and provide instant feedback.
+  3. Works smoothly across mobile (375px) and desktop viewports with WCAG AA compliance.
+- Testable Acceptance Criteria:
+  • Given valid input, when the user triggers the action, then state transitions from loading to success without page reload.
+  • Given a failed API call, when an error occurs, then a user-friendly error message displays with an actionable retry button.
+</acceptance_criteria_and_dod>
+
+<instructions>
+1. Begin your response by thinking through the architectural trade-offs, free-tier limits, and edge cases inside <thinking>...</thinking> tags.
+2. Deliver a complete, unambiguous technical blueprint and implementation instructions with complete code and configurations.
+3. Avoid vague advice such as "ensure security" or "make it modern" — provide exact libraries, configurations, and code structures.
+</instructions>`;
 }
 
 function generateGeminiNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
   const role = getDomainRole(domain);
+  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `Task: Architect and deliver an end-to-end execution specification for: ${goal}
 Expert Specialty: ${role}
 
 Context Parameters:
 ${facts.map((f) => `  * ${f}`).join("\n") || "  * Production-grade standards; zero conversational fluff."}
 
-Execution Directives:
-1. High-Density Synthesis: Provide direct, high-signal instructions with zero filler tokens.
-2. Multi-Tier Blueprint:
-   - Tier 1: Core System Architecture & Foundational Setup
-   - Tier 2: Implementation Sequencing & Technical/Operational Workflows
-   - Tier 3: Quality Gates & Automated Validation
-3. Anti-Hallucination Guardrails: Every tool, framework, library, or metric mentioned must exist, be actively maintained, and be appropriate for the specified scale.
+Technical Feasibility & Free-Tier Guardrails:
+  - Budget Limit: ${budgetStr}
+  - Service Tiers: ${isZeroBudget ? "100% Free-Tier Services Only (Vercel Hobby, Supabase Free Tier, Resend Free Tier, Gemini API standard free tier). Zero credit-card required services." : "Respect defined budget boundaries."}
+  - Quotas to Monitor: Storage limits (500MB DB), bandwidth limits (100GB/mo), rate limits (15 RPM for free AI models; [VERIFY: provider quota limits]).
+  - Zero-Cost Fallbacks: Magic links instead of paid SMS; client-side processing where possible; essential Phase 1 MVP separated from optional Phase 2.
+  - Secret Key Hygiene: Server-side proxy routing for all private API keys; zero secret leakage in client bundle.
 
-Output Schema:
-- [SPECIFICATION]: High-level operational schema
-- [ACTION MATRIX]: Sequential task breakdown with inputs, processes, and outputs
-- [VERIFICATION CHECKLIST]: Binary pass/fail criteria for completion`;
+Exact Stack & Tooling:
+  - Frontend: ${stack}
+  - Data Validation: Zod schemas on all input interfaces
+  - Data Persistence & Auth: ${integrations}
+  - Hosting & Deployment: ${hosting}
+
+Data Models & Schemas:
+  - UserProfile: { id: string, email: string, preferences: Record<string, unknown>, createdAt: timestamp }
+  - ProjectArtifact: { id: string, userId: string, title: string, content: string, status: 'draft'|'active'|'archived', updatedAt: timestamp }
+
+Execution Directives:
+1. High-Density Synthesis: Provide direct, high-signal instructions with complete working code.
+2. State Handling: Mandate layout-matched loading skeletons, empty state callouts, and localized error boundaries.
+3. Anti-Hallucination Guardrails: Every tool, framework, library, and metric must exist, be actively maintained, and be compatible with stated zero-cost/budget constraints.
+
+Definition of Done & Verification Schema:
+  - [PASS/FAIL] TypeScript compilation passes cleanly (\`tsc --noEmit\`).
+  - [PASS/FAIL] All environment variables documented in \`.env.example\` with public/secret tags.
+  - [PASS/FAIL] Input validation, loading skeletons, empty states, and error toasts verified.
+  - [PASS/FAIL] Responsive mobile layout (375px+) and WCAG AA contrast verified.`;
 }
 
 function generatePerplexityNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
+  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `[SEARCH & VERIFICATION DIRECTIVES]
 Search Intent: Conduct an authoritative, source-verified investigation and strategic blueprint for: "${goal}"
 
@@ -480,104 +675,163 @@ Investigation Scope & Domain Facts:
 ${facts.map((f) => `  • Target parameter: ${f}`).join("\n") || "  • Contemporary industry benchmark standards (Current Year)"}
 
 Search & Recency Rules:
-1. Ground all recommendations in verified, recent data. Prioritize official documentation, industry benchmarks, and active market data over speculative commentary.
-2. In-Line Source Attribution: Support all market estimates, tooling benchmarks, pricing, and compliance standards with citations.
-3. Compare Top Industry Alternatives: Identify the leading 3 proven pathways or tools for this objective, outlining concrete trade-offs, pricing models, and real-world adoption trends.
+1. Ground all recommendations in verified, recent documentation and official release notes.
+2. In-Line Source Attribution: Support all tooling trade-offs, pricing models, free-tier quotas, and compliance standards with citations.
+3. Free-Tier & Pricing Landscape Audit:
+   • Validate whether recommended services (e.g. ${hosting}, ${integrations}) offer genuinely free tiers vs free trials requiring credit-card billing activation.
+   • Audit known free-tier limits: storage limits, bandwidth limits, serverless cold starts, and rate limits.
+   • Explicitly note: [VERIFY: provider pricing/quota limits] for any unconfirmed metrics.
+
+Tooling & Integration Trade-Offs Matrix:
+- Provide a comparative markdown table: [Tool/Platform, Free Tier Allowance, Hard Quota Limits, Hidden Costs/Billing Gotchas, Recommended Use Case].
+- Contrast primary stack (${stack}) against lean alternatives.
 
 Structured Report Format:
-- **Verified Industry Landscape**: Current consensus, best practices, and verified benchmarks.
-- **Comparative Analysis Table**: Tooling/Strategy, Strengths, Limitations, Cost/Pricing Structure, Citations.
-- **Recommended Implementation Roadmap**: Step-by-step roadmap grounded in verified case studies.
-- **Critical Risk Factors**: Known pitfalls verified by community experiences or recent updates.`;
+- **Verified Industry Landscape**: Consensus best practices and production benchmarks.
+- **Free-Tier Feasibility Matrix**: Verified zero-cost boundaries and realistic fallbacks.
+- **Step-by-Step Implementation Roadmap**: Phased execution plan separating Phase 1 MVP from Phase 2 enhancements.
+- **Critical Failure Modes & Rate Limits**: Known pitfalls verified by active developer community reports.`;
 }
 
 function generateGrokNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
   const role = getDomainRole(domain);
+  const { isZeroBudget, budgetStr, stack } = extractParameters(facts, context);
+
   return `[FIRST-PRINCIPLES STRATEGIC DIRECTIVE — ZERO CORPORATE FLUFF]
 You are Grok acting as a battle-tested ${role}. Strip away all sanitized corporate boilerplate, polite platitudes, and marketing jargon.
 
 The Objective:
 "${goal}"
 
-The Reality & Constraints on the Ground:
+The Reality & Ground Truth Constraints:
 ${facts.map((f) => `  - ${f}`).join("\n") || "  - Start from scratch; optimize for speed, ruthless leverage, and true market viability."}
+  - Stated Budget: ${budgetStr}
 
-First-Principles Analysis Directives:
-1. Deconstruct the Premise: What is the fundamental physics or economic math behind making this goal work? Call out any flawed assumptions, wishful thinking, or vanity metrics immediately.
-2. The Brutal Truth: What is the single biggest reason similar attempts fail, and what is the non-consensus truth that actually moves the needle?
-3. Unfair Leverage: How can we leverage modern automation, distribution asymmetry, and lean mechanics to achieve this with 10x less wasted effort?
-4. Decisive Action Script: Provide an unfiltered, numbered punch list of what needs to happen on Day 1, Day 7, and Day 30. Be direct, witty, and uncompromisingly practical.`;
+First-Principles Feasibility Analysis:
+1. Deconstruct the Premise & Budget Math:
+   • ${isZeroBudget ? "The budget is literally $0. Strip away every paid SaaS subscription, managed cluster, and expensive API. Use battle-tested free tiers (Vercel, Supabase, Cloudflare) that require zero credit card to launch." : "Enforce ruthless capital efficiency; eliminate vanity tools."}
+   • Overengineering Audit: If anyone suggests Kubernetes, Kafka, or microservices for this MVP, reject it immediately. A unified modern stack is 10x faster to build and maintain.
+2. The Brutal Truth on Failure Modes:
+   • What is the #1 reason similar builds fail? (Over-scoped features, unvalidated assumptions, broken state handling, leaking API keys).
+3. Exact Minimalist Tech Stack:
+   • Recommended: ${stack}. No bloatware.
+
+Tactical Punch List:
+- **Day 1 (Foundation)**: Scaffold workspace, configure TypeScript & Tailwind CSS, verify .env.example, deploy live 'Hello World' URL.
+- **Day 7 (Core User Loop)**: Wire up primary feature flow, Zod input validation, loading skeletons, and persistent storage.
+- **Day 30 (Production Polish)**: Full error boundary resilience, mobile viewport polish, automated test suite, and launch announcement.
+
+Zero-BS Definition of Done:
+- Compiles cleanly with zero errors.
+- Real users can complete the core journey without crashing or seeing blank screens.
+- Completely functional within the stated ${budgetStr} constraint.`;
 }
 
 function generateCursorNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
+  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `// CURSOR AI SYSTEM DIRECTIVES & ARCHITECTURAL RULES
 // Target Project: ${goal}
 // Primary Domain: ${domain || "Full-Stack Software Architecture & Implementation"}
 
 ## ARCHITECTURAL BOUNDARIES & TECH STACK
-${facts.map((f) => `// - ${f}`).join("\n") || "// - Modern TypeScript, Vite/React, Tailwind CSS, Modular Components"}
+// - Stack: ${stack}
+// - Integrations: ${integrations}
+// - Target Environment: ${hosting}
+// - Budget Constraint: ${budgetStr}
+
+## TECHNICAL FEASIBILITY & FREE-TIER LIMITS
+// 1. Zero-Cost Enforcement: ${isZeroBudget ? "Rely strictly on verified free tiers (e.g. Supabase 500MB DB cap, Vercel Hobby 100GB/mo). Never import libraries requiring paid external services." : "Respect stated project budget."}
+// 2. Secret Protection: Never prefix private secrets with public frontend environment variables (e.g. VITE_ or NEXT_PUBLIC_). Route external API calls through server-side proxy handlers.
+// 3. Fallbacks: Provide zero-cost fallbacks for resource-intensive features (e.g. email magic links instead of SMS; client-side search instead of paid clusters).
 
 ## STRICT DEVELOPMENT CONVENTIONS (.cursorrules)
-1. Code Quality & Typing:
+1. Code Quality & Strict Typing:
    - Enforce strict TypeScript types. Never use 'any'. Explicitly declare interface contracts.
-   - Separate business logic, state stores, and UI view layers into dedicated modular files.
+   - Separate business logic, state stores, and UI view layers into dedicated modular files (under 250 lines per module).
 2. Zero Placeholder Mandate:
-   - Never output truncated code, '// TODO: implement remaining logic', or simulated mock stubs.
+   - Never output truncated code, '// TODO: implement later', or simulated mock stubs.
    - Always output fully implemented, syntactically complete functions and components.
-3. File & Module Structure:
-   - Target files must adhere to single-responsibility principles (under 250 lines per module).
-   - Ensure clean import paths, relative imports, and zero circular dependencies.
-4. Error Handling & Verification:
-   - Wrap asynchronous promises in robust try/catch blocks with user-facing error feedback.
-   - Ensure all UI buttons, inputs, and controls have fully wired, responsive event handlers.
+3. UI State Handling Requirements:
+   - Input Validation: Implement Zod schema parsing for all user input forms with field-level error messages.
+   - Loading States: Provide layout-matching skeleton components and disabled buttons with spinners during async execution.
+   - Empty States: Implement dedicated empty-state cards with helpful guidance and a call-to-action button.
+   - Error Handling: Wrap async handlers in try/catch blocks; show user-facing toast alerts and retry buttons.
+4. Responsive & Accessibility:
+   - Design mobile-first (375px min width); enforce WCAG AA contrast compliance and keyboard navigation.
 
-## IMPLEMENTATION PLAN
-1. Scaffold core type interfaces and shared utilities.
-2. Implement backend/state services with complete error resilience.
-3. Construct atomic UI components with Tailwind utility styling and accessibility attributes.
-4. Verify build compilation and lint checks before finalizing edits.`;
+## ENVIRONMENT VARIABLES & SECRETS (.env.example)
+// PUBLIC VARIABLES (safe in client bundle):
+// VITE_APP_NAME="Prompt Master"
+// SECRET VARIABLES (server-side only, NEVER expose to client):
+// DATABASE_URL="postgresql://..." // [VERIFY: provider quota limits]
+// API_SECRET_KEY="sk_live_..."
+
+## IMPLEMENTATION & VERIFICATION PLAN
+1. Phase 1: Scaffold type interfaces, shared utilities, and Zod schemas.
+2. Phase 2: Implement storage/API service layer with robust error resilience.
+3. Phase 3: Construct atomic UI components with loading skeletons and empty states.
+4. Phase 4: Run 'npm run build' and test suites to verify zero compilation errors.`;
 }
 
 function generateWindsurfNative(
   goal: string,
   facts: string[],
   domain?: string,
+  context?: OptimizationContext,
 ): string {
+  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
+    extractParameters(facts, context);
+
   return `[WINDSURF CASCADE AGENT EXECUTION PROTOCOL]
 Target Objective: "${goal}"
 Specialty Domain: ${domain || "Production System Engineering & Workflow Orchestration"}
 
-Verified Constraints & Environment:
-${facts.map((f) => `  - [FACT] ${f}`).join("\n") || "  - [FACT] Clean environment with automated verification requirements"}
+Verified Constraints & Budget Guardrails:
+  - Budget Limit: ${budgetStr}
+  - Architecture: ${stack}
+  - Integrations: ${integrations}
+  - Deployment Target: ${hosting}
+  ${facts.map((f) => `- [FACT] ${f}`).join("\n")}
 
 --- CASCADE WORKFLOW PHASES ---
 
-PHASE 1: RECONNAISSANCE & DEPENDENCY AUDIT
-- Inspect existing workspace files, configuration manifests, and package dependencies before modifying anything.
-- Identify all touchpoints, interfaces, and potential breaking changes.
+PHASE 1: RECONNAISSANCE, FREE-TIER & DEPENDENCY AUDIT
+- Inspect existing workspace files, package manifests, and configuration files before modifying code.
+- Audit free-tier limits: verify that required integrations (${integrations}) fit within free allowances (${isZeroBudget ? "zero credit card required" : "budget compliant"}).
+- Validate environment variables: inspect .env.example to ensure private keys are isolated from public client bundles.
 - Formulate a deterministic checklist of files to create, edit, or refactor.
 
 PHASE 2: ATOMIC STEP-BY-STEP IMPLEMENTATION
-- Apply modifications sequentially. Each file write must be complete and self-contained.
-- Follow strict modular separation: types in dedicated files, services isolated from UI components.
-- Zero mock placeholders: every function must execute actual business logic.
+- Apply modifications sequentially. Each file write must be complete and self-contained (zero placeholder '// TODO' comments).
+- Implement mandatory state handling across all interactive features:
+  • Input validation with Zod schemas.
+  • Layout-matched loading skeletons.
+  • Informative empty states with actionable buttons.
+  • Localized error boundaries and toast notifications.
+- Separate essential Phase 1 MVP features from optional Phase 2 enhancements.
 
-PHASE 3: TERMINAL & TOOL VERIFICATION
-- Run compilation checks ('npm run build' or equivalent lint command) to confirm zero syntax errors.
-- Inspect terminal logs for missing packages, type mismatches, or runtime warnings.
-- Automatically self-heal any reported compilation errors before concluding the session.
+PHASE 3: TERMINAL & TEST VERIFICATION
+- Run compilation checks ('npm run build' or equivalent) to confirm zero syntax or type errors.
+- Execute automated tests to verify critical user journeys and API error recovery.
+- Verify responsive layout on mobile (375px+) and desktop viewports.
+- Automatically self-heal any reported compilation or lint errors before concluding.
 
-OPERATIONAL SAFETY RULES:
-- Never overwrite working configurations without verifying existing keys.
-- Preserve backward compatibility with existing user state and database schemas.`;
+DEFINITION OF DONE & OPERATIONAL SAFETY:
+- All features verified functional with validation, loading, empty, and error states.
+- Zero secret leakage in client bundle.
+- Complete compatibility with stated ${budgetStr}.`;
 }
 
 // ----------------------------------------------------------------------------

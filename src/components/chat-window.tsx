@@ -25,28 +25,22 @@ import {
   type InferredFact,
   type IntelligenceSignal,
 } from "@/lib/interview-intelligence";
+import { evaluatePromptQuality } from "@/lib/prompt-evaluator";
 import {
   messageHasReasoning,
   messageText,
   type ThreadRecord,
 } from "@/lib/threads";
-import {
-  DEFAULT_GEMINI_MODEL,
-  DEFAULT_OLLAMA_MODEL,
-  type AIProviderType,
-} from "@/lib/ai-provider";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   AlertTriangle,
   CheckCircle2,
   Circle as HelpCircle,
-  Cpu,
   Layers,
   Lightbulb,
   MessageSquare,
   RotateCcw,
-  Server,
   Sparkles,
   Square,
   Target,
@@ -131,14 +125,45 @@ export interface PromptCertificate {
   audience: number;
   output: number;
   completeness: number;
+  feasibility: number;
+  specificity: number;
   overall: number;
   revisions: number;
   assumptions: string[];
+  weaknesses?: string[];
+  evidence?: string[];
 }
 
-function extractCertificate(text: string): PromptCertificate | null {
+function extractCertificate(
+  text: string,
+  promptContent?: string,
+  context?: { budget?: string; goal?: string },
+): PromptCertificate | null {
   const m = CERT_BLOCK_RE.exec(text);
-  if (!m) return null;
+  const promptToEvaluate = promptContent || text;
+  const evalResult = evaluatePromptQuality(promptToEvaluate, context);
+
+  if (!m) {
+    if (promptContent && promptContent.length > 80) {
+      return {
+        clarity: evalResult.dimensions.clarity.score,
+        context: evalResult.dimensions.context.score,
+        constraints: evalResult.dimensions.constraints.score,
+        audience: evalResult.dimensions.audience.score,
+        output: evalResult.dimensions.outputRequirements.score,
+        completeness: evalResult.dimensions.completeness.score,
+        feasibility: evalResult.dimensions.technicalFeasibility.score,
+        specificity: evalResult.dimensions.implementationSpecificity.score,
+        overall: evalResult.overallScore,
+        revisions: 2,
+        assumptions: [],
+        weaknesses: evalResult.actionableWeaknesses,
+        evidence: evalResult.summaryEvidence.slice(0, 4),
+      };
+    }
+    return null;
+  }
+
   const body = m[1];
   const num = (key: string): number | null => {
     const r = new RegExp(`${key}\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)`, "i").exec(
@@ -146,23 +171,26 @@ function extractCertificate(text: string): PromptCertificate | null {
     );
     return r ? Number(r[1]) : null;
   };
-  const clarity = num("clarity");
-  const context = num("context");
-  const constraints = num("constraints");
-  const audience = num("audience");
-  const output = num("output");
-  const completeness = num("completeness");
-  const overall = num("overall");
-  if (
-    clarity === null ||
-    context === null ||
-    constraints === null ||
-    audience === null ||
-    output === null ||
-    completeness === null ||
-    overall === null
-  )
-    return null;
+
+  const clarity = num("clarity") ?? evalResult.dimensions.clarity.score;
+  const contextScore = num("context") ?? evalResult.dimensions.context.score;
+  const constraints =
+    num("constraints") ?? evalResult.dimensions.constraints.score;
+  const audience = num("audience") ?? evalResult.dimensions.audience.score;
+  const output =
+    num("output") ?? evalResult.dimensions.outputRequirements.score;
+  const completeness =
+    num("completeness") ?? evalResult.dimensions.completeness.score;
+  const feasibility =
+    num("feasibility") ??
+    num("technical_feasibility") ??
+    evalResult.dimensions.technicalFeasibility.score;
+  const specificity =
+    num("specificity") ??
+    num("implementation_specificity") ??
+    evalResult.dimensions.implementationSpecificity.score;
+  const overall = num("overall") ?? evalResult.overallScore;
+
   const revisions = num("revisions") ?? 1;
   const assumpRaw = /assumptions\s*:\s*(.+)/i.exec(body)?.[1]?.trim() ?? "";
   const assumptions =
@@ -172,16 +200,33 @@ function extractCertificate(text: string): PromptCertificate | null {
           .split(/[;|]/)
           .map((s) => s.trim())
           .filter(Boolean);
+
+  const weaknessRaw = /weaknesses?\s*:\s*(.+)/i.exec(body)?.[1]?.trim() ?? "";
+  const weaknessList =
+    !weaknessRaw || /^none$/i.test(weaknessRaw)
+      ? evalResult.actionableWeaknesses
+      : [
+          ...weaknessRaw
+            .split(/[;|]/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          ...evalResult.actionableWeaknesses,
+        ];
+
   return {
     clarity,
-    context,
+    context: contextScore,
     constraints,
     audience,
     output,
     completeness,
+    feasibility,
+    specificity,
     overall,
     revisions: Math.max(1, Math.round(revisions)),
     assumptions,
+    weaknesses: Array.from(new Set(weaknessList)),
+    evidence: evalResult.summaryEvidence.slice(0, 4),
   };
 }
 
@@ -275,26 +320,12 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
   const activeExpertId = detectedExpertRef.current ?? thread.expert;
   const expert = activeExpertId ? EXPERTS[activeExpertId] : null;
 
-  // AI Provider Selection: "gemini" (Cloud) or "ollama" (Local qwen3:4b)
-  const [provider, setProvider] = useState<AIProviderType>(() => {
+  // Remove legacy local provider preference if set
+  useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem("prompt-master.ai-provider");
-      if (saved === "ollama" || saved === "gemini") return saved;
+      window.localStorage.removeItem("prompt-master.ai-provider");
     }
-    return "gemini";
-  });
-
-  const handleProviderChange = (newProvider: AIProviderType) => {
-    setProvider(newProvider);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("prompt-master.ai-provider", newProvider);
-    }
-    toast.info(
-      newProvider === "ollama"
-        ? "Switched to Local Ollama (qwen3:4b @ localhost:11434)"
-        : "Switched to Gemini (Cloud AI)",
-    );
-  };
+  }, []);
 
   const { messages, sendMessage, status, error, regenerate, clearError, stop } =
     useChat({
@@ -516,9 +547,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         body: {
           expert: detectedExpertRef.current ?? null,
-          provider,
-          model:
-            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
         },
       },
     );
@@ -533,9 +561,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         body: {
           expert: detectedExpertRef.current ?? null,
-          provider,
-          model:
-            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
         },
       },
     );
@@ -551,9 +576,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         body: {
           expert: detectedExpertRef.current,
-          provider,
-          model:
-            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
         },
       },
     );
@@ -566,9 +588,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       void regenerate({
         body: {
           expert: detectedExpertRef.current ?? thread.expert ?? null,
-          provider,
-          model:
-            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
         },
       });
     }
@@ -591,9 +610,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       {
         body: {
           expert: detectedExpertRef.current,
-          provider,
-          model:
-            provider === "ollama" ? DEFAULT_OLLAMA_MODEL : DEFAULT_GEMINI_MODEL,
         },
       },
     );
@@ -636,42 +652,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
           <p className="mt-2 text-[12px] font-medium tracking-wide text-primary/90">
             Bridging human thinking and AI understanding.
           </p>
-
-          {/* AI Provider Switcher (Gemini Cloud vs Local Ollama qwen3:4b) */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Engine:
-            </span>
-            <div className="inline-flex rounded-lg border border-border/80 bg-card/80 p-0.5 shadow-xs">
-              <button
-                type="button"
-                onClick={() => handleProviderChange("gemini")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-all cursor-pointer",
-                  provider === "gemini"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Gemini (Cloud)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleProviderChange("ollama")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-all cursor-pointer",
-                  provider === "ollama"
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Connects to local Ollama with qwen3:4b on your machine"
-              >
-                <Cpu className="h-3 w-3 text-emerald-400" />
-                <span>Local Ollama (qwen3:4b)</span>
-              </button>
-            </div>
-          </div>
 
           <div className="mt-6 w-full">
             <ComposerForm
@@ -751,38 +731,6 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* AI Engine Switcher */}
-          <div className="flex items-center rounded-lg border border-border/70 bg-card/60 p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => handleProviderChange("gemini")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
-                provider === "gemini"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="Cloud Gemini Model (gemini-2.5-flash)"
-            >
-              <Sparkles className="h-3 w-3" />
-              <span>Gemini</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleProviderChange("ollama")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-all cursor-pointer",
-                provider === "ollama"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="Local Ollama Model (qwen3:4b @ localhost:11434)"
-            >
-              <Cpu className="h-3 w-3 text-emerald-400" />
-              <span>Ollama (qwen3:4b)</span>
-            </button>
-          </div>
-
           {/* View Mode Switcher */}
           <div className="flex items-center rounded-lg border border-border/70 bg-card/60 p-0.5 text-xs">
             <button
@@ -1382,6 +1330,8 @@ function QualityCertificate({ cert }: { cert: PromptCertificate }) {
     ["Audience", cert.audience],
     ["Output", cert.output],
     ["Completeness", cert.completeness],
+    ["Technical Feasibility", cert.feasibility],
+    ["Implementation Specificity", cert.specificity],
   ];
   const tone =
     cert.overall >= 9.5
@@ -1408,7 +1358,8 @@ function QualityCertificate({ cert }: { cert: PromptCertificate }) {
               {cert.revisions} {cert.revisions === 1 ? "pass" : "passes"})
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-primary">✓</span> Quality Verified
+              <span className="text-primary">✓</span> Quality & Feasibility
+              Verified
             </div>
           </div>
         </div>
@@ -1423,16 +1374,32 @@ function QualityCertificate({ cert }: { cert: PromptCertificate }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
         {dims.map(([label, v]) => (
-          <div key={label}>
+          <div
+            key={label}
+            className="rounded-md border border-border/40 bg-background/30 p-2"
+          >
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">{label}</span>
-              <span className="tabular-nums font-medium">{v.toFixed(1)}</span>
+              <span
+                className="truncate pr-1 text-muted-foreground"
+                title={label}
+              >
+                {label}
+              </span>
+              <span className="tabular-nums font-semibold">{v.toFixed(1)}</span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className={`h-full rounded-full transition-all ${
+                  v >= 9.0
+                    ? "bg-primary"
+                    : v >= 8.0
+                      ? "bg-emerald-400"
+                      : v >= 7.0
+                        ? "bg-amber-400"
+                        : "bg-rose-400"
+                }`}
                 style={{
                   width: `${Math.min(100, Math.max(0, (v / 10) * 100))}%`,
                 }}
@@ -1442,8 +1409,42 @@ function QualityCertificate({ cert }: { cert: PromptCertificate }) {
         ))}
       </div>
 
+      {cert.weaknesses && cert.weaknesses.length > 0 && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Actionable Quality Feedback & Opportunities
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-foreground/80">
+            {cert.weaknesses.slice(0, 4).map((w, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-amber-400/80">•</span>
+                <span>{w}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {cert.evidence && cert.evidence.length > 0 && (
+        <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+          <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Prompt Architecture Verification Evidence
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-foreground/80">
+            {cert.evidence.slice(0, 3).map((e, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-emerald-400/80">✓</span>
+                <span className="truncate">{e}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {cert.assumptions.length > 0 && (
-        <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3">
+        <div className="mt-3 rounded-lg border border-border/60 bg-background/40 p-3">
           <div className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Assumptions Made
           </div>

@@ -370,21 +370,25 @@ export function inferInformation(
     });
   }
 
-  // 5. Budget Constraints
+  // 5. Budget & Free-Tier Constraints
   if (
     clean.includes("$0") ||
     clean.includes("zero budget") ||
     clean.includes("no budget") ||
     clean.includes("free tools") ||
     clean.includes("bootstrapped") ||
-    clean.includes("shoestring")
+    clean.includes("shoestring") ||
+    clean.includes("no money") ||
+    clean.includes("free tier")
   ) {
     add({
       id: "budget_constraint",
       label: "Capital Constraints",
-      value: "$0 Starting Budget / 100% Bootstrapped Free Tier",
+      value:
+        "$0 Starting Budget / 100% Bootstrapped Free Tier (Zero-Cost Services Only)",
       confidence: "high",
-      rationale: "Detected clear zero-cost constraint",
+      rationale:
+        "Detected clear zero-cost constraint requiring verified free-tier services",
       category: "business",
     });
   } else if (
@@ -406,7 +410,77 @@ export function inferInformation(
     }
   }
 
-  // 6. Timeline / Urgency
+  // 6. External Integrations & APIs
+  if (
+    clean.includes("stripe") ||
+    clean.includes("payment") ||
+    clean.includes("checkout") ||
+    clean.includes("paypal") ||
+    clean.includes("lemon squeezy")
+  ) {
+    add({
+      id: "integrations_payment",
+      label: "Payment & Billing Integration",
+      value: "Stripe / Lemon Squeezy Payment Gateway with Webhook Verification",
+      confidence: "high",
+      rationale: "Detected commercial transaction/monetization requirement",
+      category: "technical",
+    });
+  }
+  if (
+    clean.includes("auth") ||
+    clean.includes("login") ||
+    clean.includes("google sign in") ||
+    clean.includes("oauth") ||
+    clean.includes("user accounts")
+  ) {
+    add({
+      id: "integrations_auth",
+      label: "Authentication Integration",
+      value: "OAuth / Magic Links with Secure Session Management",
+      confidence: "high",
+      rationale: "Detected user identity/account requirement",
+      category: "technical",
+    });
+  }
+  if (
+    clean.includes("ai api") ||
+    clean.includes("openai") ||
+    clean.includes("gemini") ||
+    clean.includes("claude") ||
+    clean.includes("llm")
+  ) {
+    add({
+      id: "integrations_ai",
+      label: "AI Model Integration",
+      value: "External AI Provider SDK with Server-Side Proxy Key Protection",
+      confidence: "high",
+      rationale: "Detected AI provider API dependency",
+      category: "technical",
+    });
+  }
+
+  // 7. Hosting & Deployment Environment
+  if (
+    clean.includes("vercel") ||
+    clean.includes("netlify") ||
+    clean.includes("cloudflare") ||
+    clean.includes("github pages") ||
+    clean.includes("render") ||
+    clean.includes("railway") ||
+    clean.includes("fly io")
+  ) {
+    add({
+      id: "hosting_deployment",
+      label: "Hosting & Deployment Target",
+      value: "Modern Edge / Serverless Cloud Platform with CI/CD Integration",
+      confidence: "high",
+      rationale: "User identified preferred hosting/deployment ecosystem",
+      category: "technical",
+    });
+  }
+
+  // 8. Timeline / Urgency
   if (
     clean.includes("asap") ||
     clean.includes("this week") ||
@@ -453,13 +527,14 @@ export function detectVagueness(lastUserAnswer: string): {
 
   // Vague multi-word patterns
   const isVaguePhrase =
-    t === "make money" ||
-    t === "make money fast" ||
-    t === "i want to make money" ||
-    t === "make lots of money" ||
-    t === "passive income" ||
-    t === "build a good website" ||
-    t === "a website for everyone" ||
+    t.includes("make money") ||
+    t.includes("passive income") ||
+    t.includes("get rich") ||
+    t.includes("grow fast") ||
+    t.includes("get views") ||
+    t.includes("make it look good") ||
+    t.includes("standard website") ||
+    t.includes("website for everyone") ||
     t === "everyone" ||
     t === "anyone" ||
     t === "good" ||
@@ -472,12 +547,7 @@ export function detectVagueness(lastUserAnswer: string): {
     t === "not sure" ||
     t === "whatever works" ||
     t === "as fast as possible" ||
-    t === "grow fast" ||
-    t === "get views" ||
-    t === "learn coding" ||
-    t.startsWith("make it look good") ||
-    t.startsWith("standard website") ||
-    t.startsWith("make money online");
+    t === "learn coding";
 
   const isShortVague =
     words.length <= 2 && words.every((w) => VAGUE_WORDS.has(w));
@@ -686,6 +756,92 @@ export function detectContradictions(allUserAnswers: string[]): {
           "User claims the product is for 'everyone' while building a tool specifically designed for a specialized vertical.",
         recommendation:
           "Help them embrace the niche: niche positioning drives 5x higher conversion than pretending to serve everyone.",
+        severity: "warning",
+      },
+    };
+  }
+
+  // Contradiction 6: $0 Budget / Free Tier vs Features Exceeding Free-Tier Limits
+  const claimsFreeOrZero =
+    combined.includes("$0") ||
+    combined.includes("zero budget") ||
+    combined.includes("no budget") ||
+    combined.includes("free tier") ||
+    combined.includes("no money");
+  const claimsExceedingFeatures =
+    combined.includes("sms notifications") ||
+    combined.includes("twilio") ||
+    combined.includes("send text messages") ||
+    combined.includes("fine tune gpt-4") ||
+    combined.includes("dedicated gpu cluster") ||
+    combined.includes("custom model training") ||
+    combined.includes("heavy video transcoding") ||
+    combined.includes("high volume transactional emails");
+
+  if (claimsFreeOrZero && claimsExceedingFeatures) {
+    return {
+      contradiction: {
+        type: "contradiction_detected",
+        title: "Free-Tier Limit vs Feature Complexity Contradiction",
+        description:
+          "User specified a $0 budget / free tier but requested services requiring paid billing activation (e.g. paid SMS gateways, dedicated GPUs, or high-volume email services).",
+        recommendation:
+          "Provide realistic zero-cost alternatives: email magic links or WebPush instead of paid SMS, client-side WebGPU / free Hugging Face API instead of dedicated GPU clusters, and verified free-tier email providers (Resend free tier).",
+        severity: "warning",
+      },
+    };
+  }
+
+  // Contradiction 7: Unnecessarily Complex Technology Stack (Overengineering)
+  const isSimpleOrMvp =
+    combined.includes("portfolio") ||
+    combined.includes("landing page") ||
+    combined.includes("simple blog") ||
+    combined.includes("mvp") ||
+    combined.includes("prototype") ||
+    combined.includes("simple website") ||
+    combined.includes("first version");
+  const claimsOverengineered =
+    combined.includes("kubernetes") ||
+    combined.includes("k8s") ||
+    combined.includes("kafka") ||
+    combined.includes("microservices architecture") ||
+    combined.includes("distributed consensus") ||
+    combined.includes("cassandra") ||
+    combined.includes("graphql federation mesh");
+
+  if (isSimpleOrMvp && claimsOverengineered) {
+    return {
+      contradiction: {
+        type: "contradiction_detected",
+        title: "Architecture Overengineering Mismatch",
+        description:
+          "User proposes enterprise distributed microservices, Kubernetes, or Kafka for an early-stage MVP or simple website.",
+        recommendation:
+          "Guide away from infrastructure overhead: propose a modern, lean unified stack (e.g. Next.js or Vite React + Serverless backend with Supabase / SQLite) to launch in days rather than managing cluster operations.",
+        severity: "warning",
+      },
+    };
+  }
+
+  // Contradiction 8: Incompatible Deployment Runtime
+  const claimsStaticOnly =
+    combined.includes("github pages") || combined.includes("static html only");
+  const claimsServerRuntime =
+    combined.includes("sqlite database") ||
+    combined.includes("express server") ||
+    combined.includes("python backend") ||
+    combined.includes("docker container");
+
+  if (claimsStaticOnly && claimsServerRuntime) {
+    return {
+      contradiction: {
+        type: "contradiction_detected",
+        title: "Deployment Target vs Runtime Incompatibility",
+        description:
+          "User intends to host a dynamic backend with persistent server storage on a static-only hosting platform (e.g. GitHub Pages).",
+        recommendation:
+          "Clarify runtime boundaries: recommend serverless full-stack hosting (Vercel, Cloudflare Pages/Workers, Render) or separating static client from cloud backend API.",
         severity: "warning",
       },
     };
@@ -912,6 +1068,51 @@ export function detectKnowledgeGaps(
     };
   }
 
+  // Free-Tier Limits & Quota Blind Spot
+  if (
+    (combined.includes("$0") || combined.includes("free tier")) &&
+    allUserAnswers.length >= 2 &&
+    !combined.includes("quota") &&
+    !combined.includes("limit") &&
+    !combined.includes("tier limit")
+  ) {
+    return {
+      knowledgeGap: {
+        type: "knowledge_gap",
+        title: "Free-Tier Limits & Quota Blind Spot",
+        description:
+          "User is building on free-tier services without accounting for storage, bandwidth, or execution invocation quotas.",
+        recommendation:
+          "Highlight free-tier quotas (e.g. Supabase 500MB DB cap, Vercel bandwidth limits) and provide clean zero-cost fallbacks.",
+        severity: "info",
+      },
+    };
+  }
+
+  // Third-Party API Secret Protection Blind Spot
+  if (
+    (combined.includes("api key") ||
+      combined.includes("stripe") ||
+      combined.includes("openai") ||
+      combined.includes("secret")) &&
+    allUserAnswers.length >= 2 &&
+    !combined.includes("env") &&
+    !combined.includes("server-side") &&
+    !combined.includes("proxy")
+  ) {
+    return {
+      knowledgeGap: {
+        type: "knowledge_gap",
+        title: "API Key Security & Client Secret Leakage Risk",
+        description:
+          "User plans third-party API integration without defining environment variable security or server-side secret protection.",
+        recommendation:
+          "Ensure the final prompt mandates server-side proxy routes and prohibits exposing private API keys in client-side bundles.",
+        severity: "info",
+      },
+    };
+  }
+
   return {};
 }
 
@@ -1031,16 +1232,44 @@ export function analyzeInterview(
     confirmedFacts.length + inferredFacts.length >= 4 &&
     criticalRatio >= 0.75;
 
-  // Determine strategic focus
-  let strategicFocus = "Discovering Core Objectives & Target Audience";
-  if (inferredFacts.some((f) => f.category === "audience")) {
-    strategicFocus = "Pinpointing Unfair Advantage & Key Differentiators";
+  // Determine prioritized strategic focus based on interview progression:
+  // 1. Goal & audience -> 2. Features/journeys -> 3. Budget/free-tier -> 4. Tech stack ->
+  // 5. Integrations -> 6. Hosting/deploy -> 7. Security/privacy -> 8. Deliverables/criteria
+  let strategicFocus = "1. Clarifying Primary Goal & Target Audience";
+  if (
+    inferredFacts.some((f) => f.category === "audience") ||
+    confirmedFacts.length >= 1
+  ) {
+    strategicFocus = "2. Defining Required Features & Core User Journeys";
   }
-  if (confirmedFacts.length >= 2) {
-    strategicFocus = "Validating Constraints, Feasibility & Tech Stack";
+  if (
+    confirmedFacts.length >= 2 ||
+    inferredFacts.some((f) => f.category === "business")
+  ) {
+    strategicFocus =
+      "3. Validating Budget, Free-Tier Limits & Cost Constraints";
   }
-  if (confirmedFacts.length >= 4 || readinessScore >= 70) {
-    strategicFocus = "Fine-Tuning Output Architecture & Success Criteria";
+  if (
+    confirmedFacts.length >= 3 ||
+    inferredFacts.some((f) => f.category === "technical")
+  ) {
+    strategicFocus = "4. Pinpointing Exact Technology Stack & Architecture";
+  }
+  if (
+    confirmedFacts.length >= 4 ||
+    inferredFacts.some((f) => f.id.includes("integrations"))
+  ) {
+    strategicFocus = "5. Specifying External Integrations, APIs & Data Models";
+  }
+  if (
+    confirmedFacts.length >= 5 ||
+    inferredFacts.some((f) => f.id.includes("hosting"))
+  ) {
+    strategicFocus = "6. Establishing Hosting, Deployment & Secrets Security";
+  }
+  if (readinessScore >= 75 || confirmedFacts.length >= 6) {
+    strategicFocus =
+      "7. Finalizing Concrete Deliverables & Testable Acceptance Criteria";
   }
 
   return {
@@ -1061,13 +1290,18 @@ export function analyzeInterview(
 function factMatchesSlot(fact: InferredFact, slotId: string): boolean {
   const f = fact.id.toLowerCase();
   const s = slotId.toLowerCase();
-  if (s === "skills" || s === "experience")
-    return f.includes("skills") || f.includes("technical");
+  if (s === "skills" || s === "experience" || s === "tech_stack")
+    return (
+      f.includes("skills") || f.includes("technical") || f.includes("tech")
+    );
   if (s === "audience") return f.includes("audience");
   if (s === "budget") return f.includes("budget");
   if (s === "purpose" || s === "type")
     return f.includes("site_type") || f.includes("scope");
   if (s === "niche" || s === "format") return f.includes("format");
+  if (s === "hosting") return f.includes("hosting");
+  if (s === "integrations") return f.includes("integrations");
+  if (s === "timeline") return f.includes("timeline");
   return false;
 }
 
@@ -1128,13 +1362,22 @@ CURRENT STRATEGIC FOCUS: ${analysis.strategicFocus}
 READINESS SCORE: ${analysis.readinessScore}% (Master Prompt Threshold: 80%+)
 
 ## 1. MANDATORY INTERVIEW DIRECTIVES:
-• **NEVER USE FIXED QUESTIONS**: You must NEVER follow a pre-scripted list or sequence of questions. Every question must be dynamically generated on the fly.
+• **NEVER USE FIXED QUESTIONS**: Every question must be dynamically generated on the fly tailored to their specific goal and previous words.
 • **INFER MISSING INFORMATION**: Deduce as much context as possible from their goal and previous messages. Treat inferred facts as established truth.
-• **DYNAMIC FOLLOW-UP QUESTIONS**: Ask completely different questions depending on previous answers. Branch into whatever specifics, tools, constraints, or unique ideas the user introduces.
-• **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), do not reject them robotically. Provide 2-4 concrete, real-world anchors or options to help them decide.
-• **DETECT CONTRADICTIONS**: When you notice conflicting statements (e.g., $0 budget vs paid ads), diplomatically surface the tension with curiosity and guide them toward alignment.
-• **DETECT UNREALISTIC EXPECTATIONS**: When goals or timelines defy reality, validate their ambition while grounding the scope into an achievable Phase 1 MVP.
-• **DETECT KNOWLEDGE GAPS**: If a user overlooks a critical industry blind spot, share a crisp 1-sentence consultant insight before framing your next question.
+• **PRIORITIZE QUESTIONS IN THIS HIERARCHY**:
+  1. Primary goal and target audience.
+  2. Required features and core user journeys.
+  3. Budget and free-tier constraints (including $0 budget).
+  4. Preferred or required technology / frameworks.
+  5. External integrations and data requirements.
+  6. Hosting and deployment.
+  7. Security and privacy.
+  8. Deliverables and acceptance criteria.
+  Do NOT ask all these questions mechanically. Adapt to the project and stop when sufficient information is available.
+• **DETECT & RESOLVE CONTRADICTIONS**: When you notice conflicting statements (e.g. $0 budget vs expensive paid ads, or wanting enterprise microservices for a simple blog), diplomatically surface the tension with curiosity and guide them toward alignment.
+• **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), provide 2-4 concrete, real-world anchors or options to help them decide.
+• **DETECT UNREALISTIC EXPECTATIONS**: Validate ambition while grounding the scope into an achievable Phase 1 MVP.
+• **DETECT KNOWLEDGE GAPS**: Share a crisp 1-sentence consultant insight before framing your next question.
 • **ASK CLARIFICATION QUESTIONS ONLY WHEN NECESSARY**: If an answer is clear enough to formulate a high-yield prompt, accept it and advance.
 • **NEVER ASK UNNECESSARY QUESTIONS**: Do not ask about topics that are already known, inferred, or irrelevant to the master prompt.
 • **OPTIMIZE FOR NATURAL CONVERSATION**: Speak in a warm, curious, and professional tone. Keep response quality exceptionally high.
@@ -1155,11 +1398,35 @@ ${unnecessaryList}
 ## 5. ACTIVE CONSULTANT SIGNALS & HEURISTICS:
 ${signalsSection}
 
-## 6. REQUIRED OUTPUT STRUCTURE:
+## 6. CRITICAL REQUIREMENTS FOR THE FINAL MASTER PROMPTS (WHEN TRIGGERED):
+When generating final master prompts, you MUST strictly enforce:
+A. TECHNICAL FEASIBILITY:
+   • Explicitly respect the user's stated budget, including a $0 budget when specified. Never assume paid features or unrestricted API usage.
+   • Identify free-tier limits, quotas, storage limits, bandwidth limits, usage restrictions, and deployment constraints.
+   • Distinguish genuinely free services from free trials or features requiring billing activation.
+   • Specify required integrations, explaining purpose, dependencies, and configuration requirements.
+   • Identify auth, database, API, hosting, file storage, email, and third-party services where applicable.
+   • Mark unverified limits with [VERIFY: provider pricing/quota limits] rather than inventing numbers.
+   • Provide realistic zero-cost alternatives when a requested feature cannot be implemented within user constraints.
+   • Separate essential Phase 1 MVP features from optional Phase 2 enhancements.
+   • For web apps, specify hosting, env vars, secret management (never expose API keys in client), a11y (WCAG AA), and security.
+B. IMPLEMENTATION SPECIFICITY:
+   • Exact technology stack (frontend, backend, database, authentication, hosting, AI provider).
+   • Specific tools, frameworks, libraries, and APIs (e.g. React 19, Vite, Tailwind CSS v4, Zod, TanStack Query, Lucide).
+   • Purpose of major components and interactions.
+   • Required pages, features, user flows, data models/schemas, and edge cases.
+   • Functional requirements (FR-1, FR-2...) and non-functional requirements (performance, accessibility, mobile).
+   • Input validation, loading states, empty states, error handling, and success feedback.
+   • Setup instructions, environment variables with security classification, deployment steps.
+   • Concrete deliverables and an explicit Definition of Done.
+   • Testable acceptance criteria (Given/When/Then or objective checklist) and testing requirements.
+   • Never use vague phrases such as "make it modern," "ensure security," or "add proper error handling."
+
+## 7. REQUIRED OUTPUT STRUCTURE:
 1. Speak in a warm, razor-sharp, natural consultant voice (1-3 sentences acknowledging or contextualizing the last answer).
 2. Ask exactly ONE numbered question: "**Question ${analysis.questionNumber + 1}:** [Your dynamic question]"
 3. On the very last line, include the hidden machine slot tag representing the facet you are exploring: \`<!--slot:slot_id-->\`
    (Available slot IDs: ${expert.slots.map((s) => s.id).join(", ")})
 
-When Readiness is 80%+ and you have sufficient domain depth, trigger the AI Optimization Engine: generate the SEVEN model-specific master prompts (chatgpt, claude, gemini, perplexity, grok, cursor, windsurf) and certificate as specified in your master instructions. Never generate identical prompts across models.`;
+When Readiness is 80%+ and you have sufficient domain depth, trigger the AI Optimization Engine: generate the SEVEN model-specific master prompts (chatgpt, claude, gemini, perplexity, grok, cursor, windsurf) followed by the certificate. Never generate identical prompts across models.`;
 }
