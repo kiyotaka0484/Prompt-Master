@@ -2,7 +2,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 
 export type AIProviderType = "gemini";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 export const DEFAULT_MODEL = DEFAULT_GEMINI_MODEL;
 
 export interface AIProviderConfig {
@@ -131,7 +131,7 @@ let cachedGeminiModel: ReturnType<
 
 /**
  * Returns a configured Google Generative AI (Gemini) model instance.
- * Exclusively uses Gemini API (default: gemini-2.5-flash).
+ * Exclusively uses Gemini API (default: gemini-3.5-flash-lite).
  */
 export function getModel(config?: Partial<AIProviderConfig>) {
   const modelId = config?.model ?? DEFAULT_GEMINI_MODEL;
