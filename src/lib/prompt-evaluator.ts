@@ -21,6 +21,7 @@ export interface ScoreDimension {
 
 export interface PromptEvaluationResult {
   overallScore: number;
+  readiness: "Production Ready" | "Needs Refinement" | "Draft";
   dimensions: {
     clarity: ScoreDimension;
     context: ScoreDimension;
@@ -47,6 +48,16 @@ export interface EvaluationContext {
   goal?: string;
   domain?: string;
   userExperience?: string;
+}
+
+function normalizeEvalContext(
+  context?: EvaluationContext | string,
+): EvaluationContext | undefined {
+  if (!context) return undefined;
+  if (typeof context === "string") {
+    return { domain: context };
+  }
+  return context;
 }
 
 /**
@@ -439,8 +450,10 @@ function evaluateCoreDimension(
  */
 export function evaluatePromptQuality(
   prompt: string,
-  context?: EvaluationContext,
+  rawContext?: EvaluationContext | string,
 ): PromptEvaluationResult {
+  const context = normalizeEvalContext(rawContext);
+
   if (!prompt || prompt.trim().length < 50) {
     const fallbackDim = (id: string, name: string): ScoreDimension => ({
       id,
@@ -454,6 +467,7 @@ export function evaluatePromptQuality(
 
     return {
       overallScore: 4.0,
+      readiness: "Draft",
       dimensions: {
         clarity: fallbackDim("clarity", "Clarity"),
         context: fallbackDim("context", "Context"),
@@ -484,12 +498,22 @@ export function evaluatePromptQuality(
     };
   }
 
+  const domainKey = (context?.domain || "").toLowerCase();
+  const domainSpecificContextPatterns: Array<string | RegExp> =
+    domainKey.includes("business")
+      ? ["monetization", "revenue", "unit economics", "acquisition", "market"]
+      : domainKey.includes("study")
+        ? ["curriculum", "milestone", "practice", "spaced repetition", "level"]
+        : domainKey.includes("creator")
+          ? ["hook", "retention", "ctr", "packaging", "cadence", "niche"]
+          : ["architecture", "stack", "schema", "workflow", "endpoint"];
+
   // 1. Evaluate Core Dimensions
   const clarity = evaluateCoreDimension(
     "clarity",
     "Clarity & Role Definition",
     prompt,
-    ["act as", "role:", "objective:", "system prompt", "directive"],
+    ["act as", "role:", "objective:", "system prompt", "directive", "<role>"],
     ["maybe", "whatever you think", "do anything"],
   );
 
@@ -497,7 +521,14 @@ export function evaluatePromptQuality(
     "context",
     "Context & Background",
     prompt,
-    ["context", "background", "target", "situation", "use case"],
+    [
+      "context",
+      "background",
+      "target",
+      "situation",
+      "use case",
+      ...domainSpecificContextPatterns,
+    ],
     [],
   );
 
@@ -505,7 +536,15 @@ export function evaluatePromptQuality(
     "constraints",
     "Constraints & Operational Boundaries",
     prompt,
-    ["constraints", "rules", "never", "must not", "boundary", "limit"],
+    [
+      "constraints",
+      "rules",
+      "never",
+      "must not",
+      "boundary",
+      "limit",
+      "guardrails",
+    ],
     [],
   );
 
@@ -513,7 +552,16 @@ export function evaluatePromptQuality(
     "audience",
     "Target Audience & End-User Needs",
     prompt,
-    ["audience", "user", "customer", "persona", "beginner", "client"],
+    [
+      "audience",
+      "user",
+      "customer",
+      "persona",
+      "beginner",
+      "client",
+      "viewer",
+      "learner",
+    ],
     [],
   );
 
@@ -521,7 +569,15 @@ export function evaluatePromptQuality(
     "outputRequirements",
     "Output Requirements & Structure",
     prompt,
-    ["deliverable", "format", "markdown", "output", "schema", "table"],
+    [
+      "deliverable",
+      "format",
+      "markdown",
+      "output",
+      "schema",
+      "table",
+      "punch list",
+    ],
     [],
   );
 
@@ -536,6 +592,7 @@ export function evaluatePromptQuality(
       "roadmap",
       "deployment",
       "acceptance criteria",
+      ...domainSpecificContextPatterns,
     ],
     [],
   );
@@ -583,15 +640,25 @@ export function evaluatePromptQuality(
     technicalFeasibility.score >= 8.0 &&
     (prompt.toLowerCase().includes("free") || !context?.budget?.includes("0"));
 
+  const isProductionReady =
+    overallScore >= 8.5 &&
+    technicalFeasibility.score >= 8.0 &&
+    implementationSpecificity.score >= 8.0;
+
+  const readiness: "Production Ready" | "Needs Refinement" | "Draft" =
+    isProductionReady
+      ? "Production Ready"
+      : overallScore >= 6.5
+        ? "Needs Refinement"
+        : "Draft";
+
   return {
     overallScore,
+    readiness,
     dimensions,
     actionableWeaknesses: allWeaknesses.slice(0, 5),
     summaryEvidence: allEvidence.slice(0, 6),
-    isProductionReady:
-      overallScore >= 8.5 &&
-      technicalFeasibility.score >= 8.0 &&
-      implementationSpecificity.score >= 8.0,
+    isProductionReady,
     detectedBudgetConstraint: context?.budget,
     freeTierAudit: {
       isFreeTierCompliant,

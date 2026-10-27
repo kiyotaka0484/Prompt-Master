@@ -17,6 +17,7 @@ import {
   normalizeSlotId,
 } from "@/lib/interview-intelligence";
 import { ensureAllSevenModels } from "@/lib/ai-optimization-engine";
+import { evaluatePromptQuality } from "@/lib/prompt-evaluator";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   convertToModelMessages,
@@ -263,6 +264,11 @@ For example:
       ],
     };
     const prompts = ensureAllSevenModels({}, optContext);
+    const evalResult = evaluatePromptQuality(prompts.chatgpt, {
+      budget: optContext.budget,
+      goal: optContext.goal,
+      domain: expertId,
+    });
 
     return `Here are your master prompts — engineered individually for each AI model's unique architecture:
 
@@ -295,15 +301,15 @@ ${prompts.windsurf}
 \`\`\`
 
 <!--certificate
-clarity: 9.2
-context: 9.0
-constraints: 9.1
-audience: 8.8
-output: 9.3
-completeness: 8.9
-technical_feasibility: 9.0
-implementation_specificity: 9.1
-overall: 9.1
+clarity: ${evalResult.dimensions.clarity.score}
+context: ${evalResult.dimensions.context.score}
+constraints: ${evalResult.dimensions.constraints.score}
+audience: ${evalResult.dimensions.audience.score}
+output: ${evalResult.dimensions.outputRequirements.score}
+completeness: ${evalResult.dimensions.completeness.score}
+technical_feasibility: ${evalResult.dimensions.technicalFeasibility.score}
+implementation_specificity: ${evalResult.dimensions.implementationSpecificity.score}
+overall: ${evalResult.overallScore}
 revisions: 2
 -->
 
@@ -332,10 +338,19 @@ Let's continue:
 <!--slot:${nextSlot.id}-->`;
   }
 
-  const bridge =
-    lastUserText.length > 0 && relevantMessages.length > 2
-      ? "Got it — that gives us clear clarity on that piece."
-      : "Excellent. Let's build out the foundational context for your master prompt.";
+  const latestConfirmed =
+    analysis.confirmedFacts[analysis.confirmedFacts.length - 1];
+  const primarySignal = analysis.activeSignals[0];
+
+  let bridge =
+    "Excellent. Let's build out the foundational context for your master prompt.";
+  if (primarySignal) {
+    bridge = `${primarySignal.description} ${primarySignal.recommendation}`;
+  } else if (latestConfirmed) {
+    bridge = `Got it — locking in **${latestConfirmed.label}** (${latestConfirmed.value}).`;
+  } else if (lastUserText.length > 0 && relevantMessages.length > 2) {
+    bridge = "Got it — that gives us clear clarity on that piece.";
+  }
 
   return `${bridge}
 
