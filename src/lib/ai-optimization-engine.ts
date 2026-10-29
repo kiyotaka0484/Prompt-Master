@@ -1,10 +1,35 @@
 /**
  * AI Optimization Engine
  *
- * Provides model-specific prompt architectures, optimization rationale,
- * and execution recommendations across 7 leading AI models:
- * ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, and Windsurf.
+ * Transforms a single validated ProjectProfile (Canonical Project Specification)
+ * into 7 distinct, platform-native Master Prompts for:
+ * - ChatGPT (OpenAI)
+ * - Claude (Anthropic)
+ * - Gemini (Google)
+ * - Perplexity
+ * - Grok (xAI)
+ * - Cursor
+ * - Windsurf (Codeium)
+ *
+ * Core Engineering Guarantees:
+ * 1. Single Canonical Project Specification: Every platform prompt is synthesized from
+ *    the same validated specification (objective, confirmed requirements, constraints,
+ *    explicit exclusions, target deliverable/format, acceptance criteria, active
+ *    assumptions, unresolved contradictions, and task-appropriate safety/privacy/accuracy rules).
+ * 2. Anti-Fabrication Discipline: Never invents unrequested features, tech stacks, or
+ *    domain requirements to make a prompt look fuller. Inferred and assumed items remain
+ *    explicitly labeled.
+ * 3. Task-Matched Structure: Adapts structure across 8 task categories
+ *    (software_development, research_fact_checking, study_tutoring, business_planning,
+ *    creative_work, writing_editing, data_analysis, general_purpose) so coding prompts
+ *    are not forced to include academic research citations and writing/study/creative
+ *    prompts are not polluted with software test suites or web-app boilerplate.
+ * 4. Honest Platform Capabilities: Adapts to each platform's documented strengths and
+ *    workflow without claiming that magic wording tricks activate hidden reasoning or
+ *    assuming live web access when unavailable.
  */
+
+import type { ProjectProfile } from "./project-understanding-engine";
 
 export type ModelKey =
   | "chatgpt"
@@ -15,37 +40,33 @@ export type ModelKey =
   | "cursor"
   | "windsurf";
 
-export interface MultiModelPrompts {
-  chatgpt: string;
-  claude: string;
-  gemini: string;
-  perplexity: string;
-  grok: string;
-  cursor: string;
-  windsurf: string;
-}
+export type TaskCategory =
+  | "software_development"
+  | "research_fact_checking"
+  | "study_tutoring"
+  | "business_planning"
+  | "creative_work"
+  | "writing_editing"
+  | "data_analysis"
+  | "general_purpose";
 
 export interface ModelOptimizationProfile {
   key: ModelKey;
   name: string;
-  developer: string;
+  company: string;
   tagline: string;
-  emoji: string;
-  accent: string;
-  tint: string;
-  badgeBg: string;
-  badgeBorder: string;
-  badgeText: string;
-  strengths: string[];
+  badgeColor: string;
+  bestFor: string;
   whyItDiffers: string;
+  PromptStrategy: string[];
   recommendations: {
     bestEngine: string;
-    idealTemperature: string;
-    contextWindow: string;
-    bestUseCase: string;
+    recommendedMode: string;
+    temperature: string;
+    keySetting: string;
     proTip: string;
-    fileTarget: string;
   };
+  strengths: string[];
 }
 
 export const MODEL_OPTIMIZATION_PROFILES: Record<
@@ -55,823 +76,1856 @@ export const MODEL_OPTIMIZATION_PROFILES: Record<
   chatgpt: {
     key: "chatgpt",
     name: "ChatGPT",
-    developer: "OpenAI",
-    tagline: "Role-Based Framing & Markdown Delimiters",
-    emoji: "🟢",
-    accent: "text-emerald-400",
-    tint: "border-emerald-500/40",
-    badgeBg: "bg-emerald-500/10",
-    badgeBorder: "border-emerald-500/30",
-    badgeText: "text-emerald-400",
-    strengths: [
-      "Rigid constraint enforcement when delineated with Markdown headings",
-      "Exceptional tabular output and structured step-by-step formatting",
-      "System-level persona conditioning with role anchors",
-      "Predictable instruction-following across multi-turn sessions",
-    ],
+    company: "OpenAI",
+    tagline: "Structured Task & Iterative Execution",
+    badgeColor: "#10a37f",
+    bestFor:
+      "Clear multi-section deliverables, structured synthesis, and iterative follow-up refinement",
     whyItDiffers:
-      "ChatGPT models (such as GPT-4o and o3-mini) respond with maximum adherence to clear section delimiters (e.g. `# Objective`, `# Operational Rules`) and explicit role priming ('Act as a senior...'). Vague prose causes instruction drift, whereas markdown tables and numbered execution steps force deterministic adherence.",
+      "ChatGPT performs well when given explicit section headings, clear scope boundaries, a concrete deliverable format, and a defined protocol for follow-up iterations.",
+    PromptStrategy: [
+      "Explicit Markdown hierarchy separating objective, confirmed context, constraints, deliverable structure, and acceptance criteria",
+      "Clear scope and exclusion rules to prevent unrequested filler",
+      "Actionable iteration protocol for refining sections or resolving open assumptions",
+    ],
     recommendations: {
-      bestEngine: "GPT-4o or o3-mini (High Reasoning)",
-      idealTemperature:
-        "0.2 – 0.5 for precision; 0.7 for creative brainstorming",
-      contextWindow: "128,000 Tokens",
-      bestUseCase:
-        "Structured deliverables, business planning, role-based advisory, and markdown tables",
+      bestEngine: "GPT-4o or o3-mini / o1 (for complex analysis or logic)",
+      recommendedMode:
+        "Standard Chat or Canvas Mode for iterative document/code editing",
+      temperature: "0.3 for technical/analytical tasks, 0.7 for creative work",
+      keySetting: "Use Canvas when iterating on sections or code blocks",
       proTip:
-        "Paste the role definition into Custom Instructions or as the opening paragraph of a new chat for optimal persistence.",
-      fileTarget: "Chat input or Custom Instructions",
+        "Review the Deliverable and Acceptance Criteria sections first, then use the Iteration Protocol to refine individual sections.",
     },
+    strengths: [
+      "Structured multi-section formatting",
+      "Strong adherence to explicit output schemas and checklists",
+      "Reliable iterative refinement across conversational turns",
+    ],
   },
-
   claude: {
     key: "claude",
     name: "Claude",
-    developer: "Anthropic",
-    tagline: "XML Hierarchies & Extended Thought Reasoning",
-    emoji: "🟠",
-    accent: "text-orange-400",
-    tint: "border-orange-500/40",
-    badgeBg: "bg-orange-500/10",
-    badgeBorder: "border-orange-500/30",
-    badgeText: "text-orange-400",
-    strengths: [
-      "Deep semantic comprehension of hierarchical XML tags (<context>, <task>, <rules>)",
-      "Unmatched natural prose quality, intellectual honesty, and nuanced tone",
-      "Multi-step self-reflection through scratchpad (<thinking>) pre-fills",
-      "Low refusal rates when provided with clear ethical boundaries",
-    ],
+    company: "Anthropic",
+    tagline: "XML-Structured Context & Priority Hierarchy",
+    badgeColor: "#d97757",
+    bestFor:
+      "Nuanced writing, complex multi-constraint reasoning, and long-context synthesis",
     whyItDiffers:
-      "Claude's architecture is uniquely tuned to parse nested XML tags. When instructions, background context, and constraints are wrapped in `<context>` and `<instructions>` tags, Claude isolates variables cleanly and avoids hallucinations. Asking Claude to 'think step-by-step inside `<thinking>` tags' activates its deepest reasoning chains.",
+      "Claude responds reliably to XML-delimited context blocks (<context>, <priorities>, <deliverable>, <verification>) and explicit priority ordering when balancing competing constraints.",
+    PromptStrategy: [
+      "Semantic XML tags (<role>, <goal>, <context>, <priorities>, <technical_feasibility>, <verification>) to separate reference data from instructions",
+      "Explicit priority ranking so confirmed user constraints override defaults",
+      "Transparent separation of confirmed facts, active assumptions, and unresolved conflicts",
+    ],
     recommendations: {
-      bestEngine: "Claude 3.7 Sonnet (with Extended Thinking enabled)",
-      idealTemperature: "0.3 – 0.5",
-      contextWindow: "200,000 Tokens",
-      bestUseCase:
-        "Complex conceptual reasoning, long-form editorial synthesis, architectural design, and edge-case auditing",
+      bestEngine: "Claude 3.7 Sonnet or Claude 3.5 Sonnet",
+      recommendedMode:
+        "Artifacts enabled for standalone documents, visuals, or code modules",
+      temperature: "0.2 - 0.5 depending on analytical vs editorial focus",
+      keySetting:
+        "Attach relevant reference files directly inside the conversation context when available",
       proTip:
-        "Enable 'Extended Thinking' mode with a 4,000–8,000 token budget for flawless architectural solutions.",
-      fileTarget: "Claude Chat or Project Knowledge prompt",
+        "Claude follows XML boundaries closely—keep confirmed facts inside <context> and output rules inside <deliverable>.",
     },
+    strengths: [
+      "Nuanced adherence to tone, style, and negative constraints",
+      "Clear handling of long-context documents and XML-delimited inputs",
+      "Balanced trade-off analysis when requirements conflict",
+    ],
   },
-
   gemini: {
     key: "gemini",
     name: "Gemini",
-    developer: "Google",
-    tagline: "High-Density Key-Value Specs & Massive Context Grounding",
-    emoji: "🔷",
-    accent: "text-sky-400",
-    tint: "border-sky-500/40",
-    badgeBg: "bg-sky-500/10",
-    badgeBorder: "border-sky-500/30",
-    badgeText: "text-sky-400",
-    strengths: [
-      "World-record 1M – 2M token context window for massive file or repo ingestion",
-      "Dense, direct key-value prompt interpretation without preamble fatigue",
-      "Native multimodal comprehension (text, diagrams, audio, code, sheets)",
-      "Strict schema adherence for programmatic JSON/typed outputs",
-    ],
+    company: "Google",
+    tagline: "Long-Context Synthesis & Task-Matched Workspace Execution",
+    badgeColor: "#4285f4",
+    bestFor:
+      "Large context inputs, cross-document synthesis, structured tables, and multimodal tasks when media assets are involved",
     whyItDiffers:
-      "Gemini is built for direct, high-density task execution. Conversational filler and rhetorical fluff degrade its precision. The Gemini prompt uses labeled sections (`Task:`, `Parameters:`, `Anti-Hallucination Guardrails:`, `Output Schema:`) so the model locks onto targets without wasteful token overhead.",
+      "Gemini handles large context windows and structured input-to-output mappings effectively, and supports multimodal inputs (images, PDFs, audio, video) when the task specifically involves them.",
+    PromptStrategy: [
+      "Clear separation of Task Objective, Confirmed Context Parameters, Constraints, and Verification Criteria",
+      "Task-appropriate multimodal instructions included only when the project involves visual, audio, video, or document media",
+      "Structured output tables and verification checklists grounded in provided context",
+    ],
     recommendations: {
       bestEngine: "Gemini 2.5 Pro or Gemini 2.5 Flash",
-      idealTemperature:
-        "0.2 – 0.4 for deterministic facts; 0.6 for creative work",
-      contextWindow: "1,000,000 – 2,000,000 Tokens",
-      bestUseCase:
-        "Massive document analysis, cross-file research synthesis, and zero-loss context retrieval",
+      recommendedMode:
+        "Google AI Studio or Gemini Advanced with relevant documents/files attached",
+      temperature: "0.2 for analytical/technical tasks, 0.6 for creative tasks",
+      keySetting:
+        "Upload reference documents, datasets, or media assets directly when the task relies on external files",
       proTip:
-        "Upload raw documentation, PDFs, or entire project trees directly into Google AI Studio alongside this prompt.",
-      fileTarget: "Google AI Studio or Gemini Web UI",
+        "When working with large documents or files, upload them before running the prompt so Gemini can ground its output in the primary material.",
     },
+    strengths: [
+      "High-capacity context window for large files and multi-document analysis",
+      "Native multimodal understanding when images, PDFs, audio, or video are part of the task",
+      "Clean structured tables and systematic constraint verification",
+    ],
   },
-
   perplexity: {
     key: "perplexity",
     name: "Perplexity",
-    developer: "Perplexity AI",
-    tagline: "Search-Augmented Retrieval & Source Verification",
-    emoji: "🌐",
-    accent: "text-teal-400",
-    tint: "border-teal-500/40",
-    badgeBg: "bg-teal-500/10",
-    badgeBorder: "border-teal-500/30",
-    badgeText: "text-teal-400",
-    strengths: [
-      "Real-time live web indexing and academic citation verification",
-      "Synthesis of multi-source internet consensus with timestamped anchors",
-      "Automatic source filtering against stale or outdated information",
-      "Comparative market intelligence and current competitive benchmarking",
-    ],
+    company: "Perplexity AI",
+    tagline: "Source-Grounded Research & Citation Verification",
+    badgeColor: "#20b2aa",
+    bestFor:
+      "Evidence-backed research, fact-checking, official documentation verification, and cited comparisons",
     whyItDiffers:
-      "Standard LLM prompts fail on Perplexity because they treat the AI as a static memory bank. Perplexity requires search-directive framing (`Search Intent:`, `Live Recency Mandate:`, `Source Filtering Criteria:`, `Citation Rules:`). This guides its internal search engine to query authoritative web domains and cross-examine live sources before generating the response.",
+      "Perplexity is built around retrieval and source verification. Its prompt structure centers on explicit research questions, source quality standards, inline citations, and separating verified evidence from analytical inference.",
+    PromptStrategy: [
+      "Formulates targeted research and verification questions derived from the project specification",
+      "Mandates credible primary sources (official documentation, peer-reviewed studies, regulatory filings) with inline citations",
+      "Enforces a strict boundary between verified empirical evidence and reasoned inference",
+    ],
     recommendations: {
-      bestEngine: "Perplexity Pro (Sonar Deep Research or Claude 3.7 Sonnet)",
-      idealTemperature: "0.1 – 0.2 (Search-grounded)",
-      contextWindow: "Live Web Augmented Search",
-      bestUseCase:
-        "Market research, competitor benchmarking, pricing verifications, current API docs, and citation-backed reports",
+      bestEngine: "Perplexity Pro Search (Deep Research or Reasoning mode)",
+      recommendedMode:
+        "Pro Search enabled with appropriate Focus (Web / Academic)",
+      temperature: "0.1 (Strict factual retrieval and citation grounding)",
+      keySetting:
+        "Enable Pro Search to verify claims across multiple independent sources",
       proTip:
-        "Switch Focus to 'Web' or 'Academic' and toggle 'Deep Research' for comprehensive multi-page citations.",
-      fileTarget: "Perplexity Pro Search Box",
+        "Use Perplexity to verify external facts, pricing, regulatory rules, or official documentation, then feed verified findings into your implementation workflow.",
     },
+    strengths: [
+      "Live web retrieval with inline source citations",
+      "Cross-checking claims, pricing, quotas, and official documentation",
+      "Clear separation of cited facts from unverified assumptions",
+    ],
   },
-
   grok: {
     key: "grok",
     name: "Grok",
-    developer: "xAI",
-    tagline: "First-Principles Rigor, Unfiltered Candor & Truth-Seeking",
-    emoji: "⚡",
-    accent: "text-zinc-200",
-    tint: "border-zinc-500/40",
-    badgeBg: "bg-zinc-500/10",
-    badgeBorder: "border-zinc-500/30",
-    badgeText: "text-zinc-200",
-    strengths: [
-      "Uncompromising first-principles reasoning without sycophantic corporate hedges",
-      "Blunt stress-testing of assumptions, hidden flaws, and unit economics",
-      "Direct access to real-time public sentiment and conversational pulse via X",
-      "Mathematical and logical deduction uninhibited by generic safety disclaimers",
-    ],
+    company: "xAI",
+    tagline: "First-Principles Analysis & Constraint Stress-Testing",
+    badgeColor: "#1d9bf0",
+    bestFor:
+      "Direct constraint auditing, risk analysis, assumption stress-testing, and concise execution plans",
     whyItDiffers:
-      "Most AI models pad answers with diplomatic disclaimers, polite corporate validation, and risk-averse fluff. Grok excels when liberated by explicit first-principles directives: instructing it to assume zero corporate sanitized filters, audit underlying premises ruthlessly, and deliver unvarnished strategic truth.",
+      "Grok is structured around direct objectives, first-principles stress-testing of assumptions, and explicit evidence boundaries—without assuming live information access unless search is active.",
+    PromptStrategy: [
+      "Direct objective framing paired with first-principles bottleneck and risk auditing",
+      "Explicit evidence boundary: does not assume live web/social data unless live search is available in the session",
+      "Actionable tactical punch list with concrete verification criteria",
+    ],
     recommendations: {
-      bestEngine: "Grok 3 (Think Mode)",
-      idealTemperature: "0.4 – 0.7",
-      contextWindow: "131,000 Tokens",
-      bestUseCase:
-        "Brutally honest product stress-testing, risk analysis, viral positioning, and debate verification",
+      bestEngine: "Grok 3 or Grok 3 Thinking",
+      recommendedMode: "Think Mode for analytical or technical trade-offs",
+      temperature: "0.3 (Direct analytical execution)",
+      keySetting:
+        "Only rely on current/live data if live search is explicitly enabled in your session",
       proTip:
-        "Enable 'Think Mode' to see its raw step-by-step chain-of-thought before it delivers its verdict.",
-      fileTarget: "Grok Chat / Grok 3 UI",
+        "Use Grok to challenge weak assumptions, identify failure modes early, and produce a no-filler action plan.",
     },
+    strengths: [
+      "Direct, low-verbosity critique of assumptions and bottlenecks",
+      "Strong trade-off and failure-mode analysis",
+      "Concise tactical execution checklists",
+    ],
   },
-
   cursor: {
     key: "cursor",
     name: "Cursor",
-    developer: "Cursor / Anysphere",
-    tagline: "Repo-Aware .cursorrules & Architectural Boundaries",
-    emoji: "💻",
-    accent: "text-cyan-400",
-    tint: "border-cyan-500/40",
-    badgeBg: "bg-cyan-500/10",
-    badgeBorder: "border-cyan-500/30",
-    badgeText: "text-cyan-400",
-    strengths: [
-      "Repository-level code intelligence with AST and symbol graph indexing",
-      "Zero-placeholder directive enforcement (banishes `// TODO: implement later`)",
-      "Strict TypeScript type safety and lint error prevention",
-      "Atomic git diff generation optimized for multi-file workspace edits",
-    ],
+    company: "Anysphere",
+    tagline: "Repository-Aware Implementation & Scoped Diffs",
+    badgeColor: "#6366f1",
+    bestFor:
+      "Repository-aware coding, debugging, minimal scoped file changes, and test verification",
     whyItDiffers:
-      "Cursor is not a chatbot; it is an AI pair programmer editing production codebases. Prompts formatted for chat produce conversational filler and truncated snippets that break files. The Cursor prompt is formatted as a formal `.cursorrules` specification: defining strict boundary rules, banned code smells, typed schemas, and diff protocols.",
+      "Cursor operates directly inside a codebase. Its prompt specifies relevant files/modules, minimal non-destructive edits that preserve existing behavior, test execution, and honest test reporting.",
+    PromptStrategy: [
+      "Repository-aware instructions emphasizing reconnaissance of existing files before editing",
+      "Minimal, scoped changes that preserve existing public interfaces and behavior",
+      "Explicit testing requirements and honest reporting (never claiming unexecuted tests passed)",
+    ],
     recommendations: {
-      bestEngine: "Cursor Agent (Claude 3.7 Sonnet or Cursor Small)",
-      idealTemperature: "0.1 – 0.2 (High Determinism)",
-      contextWindow: "Full Workspace Repository Index",
-      bestUseCase:
-        "Production code implementation, refactoring, architectural compliance, and bug fixing",
+      bestEngine: "Claude 3.7 Sonnet or GPT-4o inside Cursor Composer / Agent",
+      recommendedMode: "Composer Agent Mode (Cmd+I / Ctrl+I)",
+      temperature: "0.0 (Deterministic codebase editing)",
+      keySetting:
+        "Reference relevant files with @Files or @Codebase before applying edits",
       proTip:
-        "Save this prompt directly into `.cursorrules` in your project root, or invoke in Cursor Composer (`Ctrl+I` / `Cmd+I`) using `@` to reference files.",
-      fileTarget: ".cursorrules in project root, or Composer (Cmd+I)",
+        "Ask Cursor to inspect the affected files first, apply minimal scoped diffs, and report exact command outputs for any tests run.",
     },
+    strengths: [
+      "Multi-file repository context awareness",
+      "Scoped diffs that preserve existing application architecture",
+      "Integrated terminal test execution and verification",
+    ],
   },
-
   windsurf: {
     key: "windsurf",
     name: "Windsurf",
-    developer: "Codeium",
-    tagline: "Cascade Agentic Protocols & Multi-Phase Action Loops",
-    emoji: "🌊",
-    accent: "text-blue-400",
-    tint: "border-blue-500/40",
-    badgeBg: "bg-blue-500/10",
-    badgeBorder: "border-blue-500/30",
-    badgeText: "text-blue-400",
-    strengths: [
-      "Autonomous multi-step execution via Cascade agentic tool flows",
-      "Built-in terminal shell awareness for build, lint, and test validation",
-      "Dynamic scratchpad reasoning with progressive state verification",
-      "Sequential file write verification preventing broken partial states",
-    ],
+    company: "Codeium",
+    tagline: "Cascade Codebase Workflow & Staged Validation",
+    badgeColor: "#06b6d4",
+    bestFor:
+      "Staged multi-step codebase workflows, dependency/impact checks, and verified completion reporting",
     whyItDiffers:
-      "Windsurf's Cascade operates as an autonomous agent that inspects files, runs shell commands, and iterates based on compiler output. Static prompts lead to haphazard edits. The Windsurf prompt is structured as a Cascade Execution Protocol divided into sequential phases (Reconnaissance → Atomic Edits → Terminal Verification).",
+      "Windsurf's Cascade flow coordinates file inspection, scoped edits, and validation steps. Its prompt organizes work into Reconnaissance, Scoped Execution, and Validation with honest completion reporting.",
+    PromptStrategy: [
+      "Phased Cascade workflow: Phase 1 Reconnaissance, Phase 2 Scoped Execution, Phase 3 Validation & Completion Report",
+      "Preservation of existing behavior and strict adherence to explicit exclusions",
+      "Transparent validation reporting distinguishing verified checks from unexecuted steps",
+    ],
     recommendations: {
-      bestEngine: "Windsurf Cascade (Claude 3.7 Sonnet or Cascade Custom)",
-      idealTemperature: "0.2",
-      contextWindow: "Cascade Multi-Tool Workspace Context",
-      bestUseCase:
-        "Full-stack end-to-end feature builds, iterative debugging with terminal verification, and deep dependency audits",
+      bestEngine: "Cascade Base / Claude 3.7 Sonnet in Windsurf",
+      recommendedMode: "Cascade Write / Flow Mode",
+      temperature: "0.0 (Deterministic step-by-step workflow)",
+      keySetting:
+        "Review Cascade's proposed file plan in Phase 1 before approving multi-file writes",
       proTip:
-        "Store this in `.windsurfrules` or paste into Cascade Chat. Let Cascade run the terminal verification commands autonomously.",
-      fileTarget: ".windsurfrules in project root, or Cascade Chat",
+        "Let Cascade complete Phase 1 reconnaissance to confirm file paths and existing interfaces before executing Phase 2 changes.",
     },
+    strengths: [
+      "Structured multi-phase codebase navigation and impact analysis",
+      "Coordinated edits across interdependent modules",
+      "Clear completion reporting and verification tracking",
+    ],
   },
 };
 
-export const ALL_MODELS: ModelOptimizationProfile[] = [
-  MODEL_OPTIMIZATION_PROFILES.chatgpt,
-  MODEL_OPTIMIZATION_PROFILES.claude,
-  MODEL_OPTIMIZATION_PROFILES.gemini,
-  MODEL_OPTIMIZATION_PROFILES.perplexity,
-  MODEL_OPTIMIZATION_PROFILES.grok,
-  MODEL_OPTIMIZATION_PROFILES.cursor,
-  MODEL_OPTIMIZATION_PROFILES.windsurf,
-];
+export const ALL_MODELS: ModelOptimizationProfile[] = Object.values(
+  MODEL_OPTIMIZATION_PROFILES,
+);
 
-/**
- * Ensures that all 7 AI models receive a dedicated, structurally optimized prompt.
- * If any model is missing from raw input, it synthesizes an architecturally native
- * prompt tailored to that model's strengths rather than duplicating generic content.
- */
-export function ensureAllSevenModels(
-  raw: Partial<MultiModelPrompts>,
-  context?: OptimizationContext,
-): MultiModelPrompts {
-  // Find a base prompt to extract facts and constraints from
-  const base =
-    raw.chatgpt ||
-    raw.claude ||
-    raw.gemini ||
-    raw.cursor ||
-    raw.windsurf ||
-    raw.perplexity ||
-    raw.grok ||
-    (context?.goal ? `Goal: ${context.goal}` : "Master strategic objective");
-
-  // Extract core elements cleanly
-  const cleanGoal =
-    context?.goal ||
-    extractSection(base, [
-      /goal\s*:\s*([^\n]+)/i,
-      /objective\s*:\s*([^\n]+)/i,
-      /task\s*:\s*([^\n]+)/i,
-    ]) ||
-    "Execute high-impact strategic execution plan";
-
-  const extractedFacts = Array.from(
-    new Set([...(context?.facts ?? []), ...extractContextLines(base)]),
-  );
-
-  const resolveModel = (
-    rawPrompt: string | undefined,
-    generator: () => string,
-  ): string => {
-    // If missing or truncated / incomplete (under 200 chars), synthesize complete native prompt
-    if (!rawPrompt || rawPrompt.trim().length < 200) {
-      return generator();
-    }
-    // If prompt is present, ensure all structured interview facts are retained
-    if (extractedFacts.length === 0) {
-      return rawPrompt.trim();
-    }
-    const promptLower = rawPrompt.toLowerCase();
-    const missingFacts = extractedFacts.filter((f) => {
-      const key = f.toLowerCase().split(/[:-]/)[0].trim();
-      return !promptLower.includes(key);
-    });
-    if (missingFacts.length === 0) {
-      return rawPrompt.trim();
-    }
-    return `${rawPrompt.trim()}\n\n# CONFIRMED INTERVIEW REQUIREMENTS & CONTEXT\n${missingFacts.map((f) => `- ${f}`).join("\n")}`;
-  };
-
-  return {
-    chatgpt: resolveModel(raw.chatgpt, () =>
-      generateChatGPTNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    claude: resolveModel(raw.claude, () =>
-      generateClaudeNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    gemini: resolveModel(raw.gemini, () =>
-      generateGeminiNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    perplexity: resolveModel(raw.perplexity, () =>
-      generatePerplexityNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    grok: resolveModel(raw.grok, () =>
-      generateGrokNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    cursor: resolveModel(raw.cursor, () =>
-      generateCursorNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-    windsurf: resolveModel(raw.windsurf, () =>
-      generateWindsurfNative(
-        cleanGoal,
-        extractedFacts,
-        context?.expertDomain,
-        context,
-      ),
-    ),
-  };
-}
-
-/**
- * Convenience function to generate optimized prompts for all 7 AI models
- */
-export function generateOptimizedPrompts(
-  goal: string,
-  facts: string[] = [],
-  expertDomain?: string,
-  context?: OptimizationContext,
-): MultiModelPrompts {
-  return ensureAllSevenModels(
-    {},
-    {
-      ...context,
-      goal,
-      expertDomain: expertDomain ?? context?.expertDomain,
-      facts,
-    },
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Model-Specific Native Format Generators
-// ----------------------------------------------------------------------------
+export type MultiModelPrompts = Record<ModelKey, string>;
 
 export interface OptimizationContext {
   goal?: string;
   expertDomain?: string;
-  budget?: string;
-  techStack?: string;
-  integrations?: string;
-  hosting?: string;
-  audience?: string;
-  userExperience?: "beginner" | "intermediate" | "advanced";
+  domain?: string;
   facts?: string[];
+  budget?: string;
+  userExperience?: string;
+  projectProfile?: ProjectProfile;
 }
 
-function extractParameters(facts: string[], context?: OptimizationContext) {
-  const combined = facts.join(" ").toLowerCase();
-  const isZeroBudget =
-    context?.budget?.includes("$0") ||
-    context?.budget?.toLowerCase().includes("free") ||
-    combined.includes("$0") ||
-    combined.includes("zero budget") ||
-    combined.includes("no budget") ||
-    combined.includes("free tier") ||
-    combined.includes("shoestring");
-
-  const budgetStr =
-    context?.budget ||
-    (isZeroBudget
-      ? "$0 Starting Budget (Zero-cost free-tier architecture; verify provider terms and quotas before deployment)"
-      : facts.find((f) => f.toLowerCase().includes("budget")) ||
-        "Lean Bootstrapped Budget");
-
-  const isWebOrApp =
-    (context?.expertDomain || "").toLowerCase().includes("web") ||
-    (context?.expertDomain || "").toLowerCase().includes("app") ||
-    combined.includes("website") ||
-    combined.includes("web app") ||
-    combined.includes("saas") ||
-    combined.includes("portfolio") ||
-    combined.includes("react");
-
-  const stack =
-    context?.techStack ||
-    (combined.includes("next")
-      ? "Next.js 15 (App Router), TypeScript, Tailwind CSS v4, Lucide React, TanStack Query, Drizzle ORM, Supabase/PostgreSQL"
-      : isWebOrApp
-        ? "Vite + React 19, TypeScript, Tailwind CSS v4, Lucide React, TanStack Query, Zod for validation, Supabase/Firebase free tier"
-        : "Domain-specific modern execution stack");
-
-  const integrations =
-    context?.integrations ||
-    (combined.includes("stripe")
-      ? "Stripe Payments (Checkout Sessions & Webhook signatures with raw body parsing)"
-      : combined.includes("auth")
-        ? "Supabase Auth / Firebase Auth (Google OAuth & Email Magic Links; no paid SMS)"
-        : isWebOrApp
-          ? "Standard authenticated API endpoints with environment-variable-backed secrets"
-          : "Domain-specific modern tools and resources");
-
-  const hosting =
-    context?.hosting ||
-    (isWebOrApp
-      ? isZeroBudget
-        ? "Cloudflare Pages (unlimited bandwidth; 500 builds/mo) or Vercel Hobby [VERIFY: commercial eligibility and personal-use restrictions]"
-        : "Vercel / Cloudflare Pages with automated git-push CI/CD deployment"
-      : "Domain-specific publishing and distribution workflow");
-
-  return { isZeroBudget, budgetStr, isWebOrApp, stack, integrations, hosting };
+export interface CanonicalProjectSpec {
+  objective: string;
+  taskCategory: TaskCategory;
+  taskCategoryLabel: string;
+  domainLabel: string;
+  targetPlatform?: string;
+  audience?: {
+    value: string;
+    status: "confirmed" | "inferred" | "assumed";
+  };
+  deliverable?: {
+    value: string;
+    format?: string;
+    status: "confirmed" | "inferred" | "assumed";
+  };
+  confirmedRequirements: string[];
+  functionalRequirements: string[];
+  nonFunctionalRequirements: string[];
+  constraints: string[];
+  budget?: {
+    value: string;
+    isZeroBudget: boolean;
+    status: "confirmed" | "inferred" | "assumed";
+  };
+  timeline?: {
+    value: string;
+    status: "confirmed" | "inferred" | "assumed";
+  };
+  explicitExclusions: string[];
+  acceptanceCriteria: string[];
+  unresolvedAssumptions: string[];
+  unresolvedContradictions: string[];
+  unresolvedQuestions: string[];
+  safetyPrivacyAccuracy: string[];
+  hasMultimodalContext: boolean;
+  hasLiveWebNeed: boolean;
+  hasCodebaseModification: boolean;
+  softwareParams?: {
+    stack?: string;
+    integrations?: string;
+    hosting?: string;
+    needsSecretIsolation: boolean;
+    needsFreeTierGuardrails: boolean;
+  };
 }
 
-function generateChatGPTNative(
+const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  software_development: "Software Development & Debugging",
+  research_fact_checking: "Research & Fact-Checking",
+  study_tutoring: "Study & Tutoring",
+  business_planning: "Business & Strategic Planning",
+  creative_work: "Creative Work & Worldbuilding",
+  writing_editing: "Writing, Editing & Editorial Communication",
+  data_analysis: "Data Analysis & Quantitative Synthesis",
+  general_purpose: "General-Purpose Task Execution",
+};
+
+/**
+ * Classifies the project into one of 8 task categories so the prompt structure
+ * matches the actual work being performed.
+ */
+export function classifyTaskCategory(
   goal: string,
-  facts: string[],
+  facts: string[] = [],
   domain?: string,
   context?: OptimizationContext,
+): TaskCategory {
+  const profile = context?.projectProfile;
+  const primaryText = [
+    goal,
+    profile?.primaryGoal?.value || "",
+    profile?.desiredDeliverable?.value || "",
+    profile?.outputFormat?.value || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const allText = [
+    primaryText,
+    ...facts,
+    ...(profile?.confirmedFacts.map((f) => `${f.label}: ${f.value}`) ?? []),
+    ...(profile?.functionalRequirements.map((r) => r.value) ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const dom = (
+    domain ||
+    context?.expertDomain ||
+    context?.domain ||
+    profile?.expertId ||
+    ""
+  ).toLowerCase();
+
+  // 1. Check strong non-software signals in primary objective first so a writing,
+  // research, study, creative, or data task is never misclassified as software.
+  const isResearchPrimary =
+    /\b(fact[- ]?check|literature review|research report|research question|systematic review|primary sources|peer[- ]?reviewed|citations?|verify claims|evidence synthesis|market research report|due diligence report|whitepaper research)\b/i.test(
+      primaryText,
+    );
+  const isDataAnalysisPrimary =
+    /\b(data analysis|analyze (?:the |this )?(?:dataset|csv|sql|cohort|churn|metrics|survey|spreadsheet)|statistical analysis|regression|hypothesis test|exploratory data|pandas|jupyter|bi report|funnel analysis|kpi analysis)\b/i.test(
+      primaryText,
+    );
+  const isStudyPrimary =
+    /\b(study plan|tutor|tutoring|learn how to|prepare for (?:the )?exam|curriculum|syllabus|flashcards? for studying|lesson plan|spaced repetition|exam prep|practice problems|mastery roadmap)\b/i.test(
+      primaryText,
+    );
+  const isCreativePrimary =
+    /\b(short story|novel|screenplay|scriptwriting|worldbuilding|fiction|poetry|poem|character backstory|rpg campaign|game lore|creative story|fable|lyric|story arc)\b/i.test(
+      primaryText,
+    );
+  const isWritingPrimary =
+    /\b(write (?:a |an )?(?:essay|article|blog post|op-ed|newsletter issue|press release|speech|memo|whitepaper|case study|email sequence|cover letter)|copywriting|proofread|edit (?:this|my) (?:draft|essay|article|prose)|editorial)\b/i.test(
+      primaryText,
+    );
+
+  // Strong software/coding cues
+  const hasExplicitSoftwareSignals =
+    /\b(build (?:a |an )?(?:web|website|app|application|saas|platform|dashboard|store|e-commerce|tool|cli|api|microservice|extension|plugin)|react|vite|next\.?js|tailwind|typescript|javascript|python backend|node\.?js|supabase|postgresql|sqlite|mongodb|prisma|drizzle|stripe|endpoint|codebase|refactor|bug|debug|unit test|docker|kubernetes|cloudflare|vercel|netlify|github pages|indexeddb|oauth|jwt)\b/i.test(
+      allText,
+    );
+
+  if (isResearchPrimary && !hasExplicitSoftwareSignals) {
+    return "research_fact_checking";
+  }
+  if (isDataAnalysisPrimary && !hasExplicitSoftwareSignals) {
+    return "data_analysis";
+  }
+  if (isStudyPrimary && !hasExplicitSoftwareSignals) {
+    return "study_tutoring";
+  }
+  if (isCreativePrimary && !hasExplicitSoftwareSignals) {
+    return "creative_work";
+  }
+  if (isWritingPrimary && !hasExplicitSoftwareSignals) {
+    return "writing_editing";
+  }
+
+  if (hasExplicitSoftwareSignals || dom === "website" || dom === "developer") {
+    return "software_development";
+  }
+
+  // Secondary classification across full context
+  if (
+    /\b(research|fact[- ]?check|citations?|peer[- ]?reviewed|credible sources|literature|investigate|empirical evidence)\b/i.test(
+      allText,
+    )
+  ) {
+    return "research_fact_checking";
+  }
+
+  if (
+    /\b(dataset|csv|cohort|statistical|anova|p-value|confidence interval|correlation|outlier|sql query|data cleaning|chart|visualization)\b/i.test(
+      allText,
+    )
+  ) {
+    return "data_analysis";
+  }
+
+  if (
+    dom === "study" ||
+    /\b(study|tutor|exam|curriculum|syllabus|pedagog|active recall|worked example|quiz|learner)\b/i.test(
+      allText,
+    )
+  ) {
+    return "study_tutoring";
+  }
+
+  if (
+    /\b(fiction|story|novel|worldbuilding|character|screenplay|poem|poetry|mythology|creative direction|storyboard)\b/i.test(
+      allText,
+    )
+  ) {
+    return "creative_work";
+  }
+
+  if (
+    dom === "creator" ||
+    /\b(essay|article|op-ed|editorial|copywriting|blog post|newsletter|manuscript|tone of voice|proofread|rewrite|prose)\b/i.test(
+      allText,
+    )
+  ) {
+    return "writing_editing";
+  }
+
+  if (
+    dom === "business" ||
+    /\b(business plan|go-to-market|unit economics|pricing model|monetization|revenue|b2b|cac|ltv|pitch deck|acquisition channel|operations plan)\b/i.test(
+      allText,
+    )
+  ) {
+    return "business_planning";
+  }
+
+  return "general_purpose";
+}
+
+/**
+ * Builds a single, canonical project specification from the validated ProjectProfile
+ * and optimization context without inventing unrequested requirements.
+ */
+export function buildCanonicalProjectSpec(
+  goal: string,
+  facts: string[] = [],
+  domain?: string,
+  context?: OptimizationContext,
+): CanonicalProjectSpec {
+  const profile = context?.projectProfile;
+  const cleanGoal =
+    (profile?.primaryGoal?.value || context?.goal || goal || "").trim() ||
+    "Complete the specified project objective";
+
+  const taskCategory = classifyTaskCategory(cleanGoal, facts, domain, context);
+  const taskCategoryLabel = TASK_CATEGORY_LABELS[taskCategory];
+
+  const rawDomain =
+    domain || context?.expertDomain || context?.domain || profile?.expertId;
+  const domainLabel = getDomainLabel(rawDomain, taskCategory);
+
+  // 1. Target platform (if specified)
+  const targetPlatform = profile?.targetPlatform?.value;
+
+  // 2. Audience (preserve confirmed vs inferred/assumed status)
+  let audience: CanonicalProjectSpec["audience"];
+  if (profile?.intendedAudience?.value) {
+    audience = {
+      value: profile.intendedAudience.value,
+      status:
+        profile.intendedAudience.origin === "explicit"
+          ? "confirmed"
+          : profile.intendedAudience.origin === "inferred"
+            ? "inferred"
+            : "assumed",
+    };
+  } else {
+    const audFact = facts.find((f) =>
+      /^(?:target\s+)?audience\s*:/i.test(f.trim()),
+    );
+    if (audFact) {
+      const isInf = /\(inferred\)/i.test(audFact);
+      const isAssumed = /\(assumed\)/i.test(audFact);
+      audience = {
+        value: audFact
+          .replace(/^(?:target\s+)?audience\s*:\s*/i, "")
+          .replace(/\s*\((?:inferred|assumed)\)\s*$/i, "")
+          .trim(),
+        status: isAssumed ? "assumed" : isInf ? "inferred" : "confirmed",
+      };
+    } else {
+      const goalAudMatch =
+        /\bfor\s+([a-z0-9][a-z0-9\s-]{2,45}?)(?:\.|,|\bwith\b|\busing\b|\bin\b|\bexclude\b|\band\b|$)/i.exec(
+          cleanGoal,
+        );
+      if (goalAudMatch && goalAudMatch[1]) {
+        audience = {
+          value: goalAudMatch[1].trim(),
+          status: "inferred",
+        };
+      }
+    }
+  }
+
+  // 3. Deliverable & Output Format
+  let deliverable: CanonicalProjectSpec["deliverable"];
+  if (profile?.desiredDeliverable?.value || profile?.outputFormat?.value) {
+    const delivOrigin =
+      profile?.desiredDeliverable?.origin ||
+      profile?.outputFormat?.origin ||
+      "explicit";
+    deliverable = {
+      value:
+        profile?.desiredDeliverable?.value ||
+        profile?.outputFormat?.value ||
+        cleanGoal,
+      format: profile?.outputFormat?.value,
+      status:
+        delivOrigin === "explicit"
+          ? "confirmed"
+          : delivOrigin === "inferred"
+            ? "inferred"
+            : "assumed",
+    };
+  } else {
+    const delivFact = facts.find((f) =>
+      /^(?:desired\s+deliverable|deliverable|output\s+format|format)\s*:/i.test(
+        f.trim(),
+      ),
+    );
+    if (delivFact) {
+      const isInf = /\(inferred\)/i.test(delivFact);
+      const isAssumed = /\(assumed\)/i.test(delivFact);
+      deliverable = {
+        value: delivFact
+          .replace(
+            /^(?:desired\s+deliverable|deliverable|output\s+format|format)\s*:\s*/i,
+            "",
+          )
+          .replace(/\s*\((?:inferred|assumed)\)\s*$/i, "")
+          .trim(),
+        status: isAssumed ? "assumed" : isInf ? "inferred" : "confirmed",
+      };
+    }
+  }
+
+  // 4. Budget & Timeline
+  let budget: CanonicalProjectSpec["budget"];
+  const rawBudgetStr =
+    profile?.budget?.value ||
+    context?.budget ||
+    facts
+      .find((f) =>
+        /^(?:stated\s+)?budget(?:\s+constraint)?\s*:/i.test(f.trim()),
+      )
+      ?.replace(/^(?:stated\s+)?budget(?:\s+constraint)?\s*:\s*/i, "")
+      .trim();
+
+  if (rawBudgetStr) {
+    const lowerB = rawBudgetStr.toLowerCase();
+    const isZero =
+      lowerB.includes("$0") ||
+      lowerB === "0" ||
+      lowerB.includes("zero") ||
+      lowerB.includes("free") ||
+      lowerB.includes("no money") ||
+      lowerB.includes("no budget");
+    const bOrigin = profile?.budget?.origin || "explicit";
+    budget = {
+      value: rawBudgetStr
+        .replace(/\s*\((?:inferred|assumed)\)\s*$/i, "")
+        .trim(),
+      isZeroBudget: isZero,
+      status:
+        bOrigin === "explicit"
+          ? "confirmed"
+          : bOrigin === "inferred"
+            ? "inferred"
+            : "assumed",
+    };
+  }
+
+  let timeline: CanonicalProjectSpec["timeline"];
+  if (profile?.timeline?.value) {
+    timeline = {
+      value: profile.timeline.value,
+      status:
+        profile.timeline.origin === "explicit"
+          ? "confirmed"
+          : profile.timeline.origin === "inferred"
+            ? "inferred"
+            : "assumed",
+    };
+  } else {
+    const timeFact = facts.find((f) =>
+      /^(?:timeline|deadline|time\s+commitment)\s*:/i.test(f.trim()),
+    );
+    if (timeFact) {
+      timeline = {
+        value: timeFact
+          .replace(/^(?:timeline|deadline|time\s+commitment)\s*:\s*/i, "")
+          .replace(/\s*\((?:inferred|assumed)\)\s*$/i, "")
+          .trim(),
+        status: /\(inferred\)/i.test(timeFact)
+          ? "inferred"
+          : /\(assumed\)/i.test(timeFact)
+            ? "assumed"
+            : "confirmed",
+      };
+    }
+  }
+
+  // 5. Confirmed Requirements, Functional & Non-Functional Requirements, Constraints, Exclusions
+  const confirmedRequirements: string[] = [];
+  const addUnique = (arr: string[], item: string) => {
+    const trimmed = item.trim();
+    if (!trimmed) return;
+    const norm = trimmed.toLowerCase();
+    if (!arr.some((existing) => existing.toLowerCase() === norm)) {
+      arr.push(trimmed);
+    }
+  };
+
+  if (profile) {
+    for (const cf of profile.confirmedFacts) {
+      addUnique(confirmedRequirements, `${cf.label}: ${cf.value}`);
+    }
+    for (const pref of profile.userPreferences) {
+      addUnique(confirmedRequirements, `Preference: ${pref.value}`);
+    }
+    for (const res of profile.resources) {
+      addUnique(confirmedRequirements, `Resource: ${res.value}`);
+    }
+    for (const [extKey, extField] of Object.entries(profile.domainExtensions)) {
+      if (extKey === "interview_control") continue;
+      if (extField.origin === "explicit") {
+        addUnique(confirmedRequirements, `${extKey}: ${extField.value}`);
+      }
+    }
+  }
+
+  const unresolvedAssumptions: string[] = [];
+  for (const fact of facts) {
+    const trimmed = fact.trim();
+    if (!trimmed) continue;
+    if (/\((?:inferred|assumed)\)\s*$/i.test(trimmed)) {
+      addUnique(unresolvedAssumptions, trimmed);
+    } else {
+      addUnique(confirmedRequirements, trimmed);
+    }
+  }
+
+  if (profile) {
+    for (const ia of profile.inferredAssumptions) {
+      if (ia.status !== "active") continue;
+      const tag = ia.origin === "assumed" ? "Assumed" : "Inferred";
+      const cleanLabel = ia.label.replace(/\s*\((?:Assumed|Inferred)\)$/i, "");
+      addUnique(unresolvedAssumptions, `${cleanLabel}: ${ia.value} (${tag})`);
+    }
+  }
+  if (audience && audience.status !== "confirmed") {
+    const tag = audience.status === "assumed" ? "Assumed" : "Inferred";
+    addUnique(
+      unresolvedAssumptions,
+      `Target Audience: ${audience.value} (${tag})`,
+    );
+  }
+  if (deliverable && deliverable.status !== "confirmed") {
+    const tag = deliverable.status === "assumed" ? "Assumed" : "Inferred";
+    addUnique(
+      unresolvedAssumptions,
+      `Target Deliverable: ${deliverable.value} (${tag})`,
+    );
+  }
+
+  const functionalRequirements: string[] = [];
+  if (profile) {
+    for (const fr of profile.functionalRequirements) {
+      addUnique(functionalRequirements, fr.value);
+    }
+  }
+
+  const nonFunctionalRequirements: string[] = [];
+  if (profile) {
+    for (const nfr of profile.nonFunctionalRequirements) {
+      addUnique(nonFunctionalRequirements, nfr.value);
+    }
+  }
+
+  const constraints: string[] = [];
+  if (profile) {
+    for (const c of profile.constraints) {
+      addUnique(constraints, c.value);
+    }
+  }
+  if (budget) {
+    addUnique(
+      constraints,
+      `Budget Constraint: ${budget.value}${budget.status !== "confirmed" ? ` (${budget.status})` : ""}`,
+    );
+  }
+  if (timeline) {
+    addUnique(
+      constraints,
+      `Timeline Constraint: ${timeline.value}${timeline.status !== "confirmed" ? ` (${timeline.status})` : ""}`,
+    );
+  }
+
+  const explicitExclusions: string[] = [];
+  if (profile) {
+    for (const ex of profile.explicitExclusions) {
+      addUnique(explicitExclusions, ex.value);
+    }
+  }
+  for (const f of facts) {
+    if (
+      /\b(?:exclude|excluding|do not include|no paid|without|must not|avoid)\b/i.test(
+        f,
+      )
+    ) {
+      addUnique(explicitExclusions, f);
+    }
+  }
+
+  // 6. Unresolved Contradictions & Questions
+  const unresolvedContradictions: string[] = [];
+  if (profile) {
+    for (const c of profile.contradictions) {
+      if (c.status === "unresolved") {
+        addUnique(
+          unresolvedContradictions,
+          `${c.title}: ${c.description} (Recommended resolution: ${c.recommendation})`,
+        );
+      }
+    }
+  }
+
+  const unresolvedQuestions: string[] = [];
+  if (profile) {
+    for (const q of profile.unresolvedQuestions) {
+      addUnique(unresolvedQuestions, `${q.label}: ${q.question}`);
+    }
+  }
+
+  // 7. Acceptance Criteria
+  const acceptanceCriteria: string[] = [];
+  if (profile) {
+    for (const sc of profile.successCriteria) {
+      addUnique(acceptanceCriteria, sc.value);
+    }
+  }
+  for (const crit of getDefaultTaskAcceptanceCriteria(
+    taskCategory,
+    cleanGoal,
+    explicitExclusions,
+  )) {
+    addUnique(acceptanceCriteria, crit);
+  }
+
+  // 8. Multimodal, Live Web, and Codebase Modification detection
+  const combinedCorpus = [
+    cleanGoal,
+    ...confirmedRequirements,
+    ...functionalRequirements,
+    ...constraints,
+  ].join(" ");
+
+  const hasMultimodalContext =
+    /\b(image|images|photo|screenshot|diagram|video|audio|voice|pdf|slide deck|vision|multimodal|chart image|handwritten|scan)\b/i.test(
+      combinedCorpus,
+    );
+
+  const hasLiveWebNeed =
+    taskCategory === "research_fact_checking" ||
+    /\b(current|latest|2025|2026|real-time|live data|recent news|up-to-date|market prices|current regulations|benchmark)\b/i.test(
+      combinedCorpus,
+    );
+
+  const hasCodebaseModification =
+    taskCategory === "software_development" ||
+    /\b(repo|repository|codebase|refactor|existing code|file|module|script|pull request|commit|test suite)\b/i.test(
+      combinedCorpus,
+    );
+
+  // 9. Software parameters (only when taskCategory === "software_development")
+  let softwareParams: CanonicalProjectSpec["softwareParams"];
+  if (taskCategory === "software_development") {
+    const extracted = extractSoftwareParameters(
+      cleanGoal,
+      confirmedRequirements,
+      unresolvedAssumptions,
+      budget,
+    );
+    softwareParams = extracted;
+  }
+
+  // 10. Safety, Privacy, and Factual Accuracy requirements tailored to the task
+  const safetyPrivacyAccuracy = buildSafetyPrivacyAccuracyRules(
+    taskCategory,
+    budget,
+    softwareParams,
+    hasLiveWebNeed,
+  );
+
+  return {
+    objective: cleanGoal,
+    taskCategory,
+    taskCategoryLabel,
+    domainLabel,
+    targetPlatform,
+    audience,
+    deliverable,
+    confirmedRequirements,
+    functionalRequirements,
+    nonFunctionalRequirements,
+    constraints,
+    budget,
+    timeline,
+    explicitExclusions,
+    acceptanceCriteria,
+    unresolvedAssumptions,
+    unresolvedContradictions,
+    unresolvedQuestions,
+    safetyPrivacyAccuracy,
+    hasMultimodalContext,
+    hasLiveWebNeed,
+    hasCodebaseModification,
+    softwareParams,
+  };
+}
+
+function getDomainLabel(
+  rawDomain: string | undefined,
+  taskCategory: TaskCategory,
 ): string {
-  const role = getDomainRole(domain);
-  const { isZeroBudget, budgetStr, isWebOrApp, stack, integrations, hosting } =
-    extractParameters(facts, context);
+  const d = (rawDomain || "").toLowerCase();
+  if (taskCategory === "software_development") {
+    return "Software Architecture & Engineering";
+  }
+  if (taskCategory === "research_fact_checking") {
+    return "Evidence Synthesis & Fact Verification";
+  }
+  if (taskCategory === "study_tutoring") {
+    return "Pedagogical Design & Skill Mastery";
+  }
+  if (taskCategory === "business_planning") {
+    return "Venture Strategy & Operational Planning";
+  }
+  if (taskCategory === "creative_work") {
+    return "Creative Direction & Narrative Craft";
+  }
+  if (taskCategory === "writing_editing") {
+    return "Editorial Strategy & High-Clarity Writing";
+  }
+  if (taskCategory === "data_analysis") {
+    return "Quantitative Analysis & Decision Intelligence";
+  }
+  if (d.includes("business")) return "Strategic Advisory & Planning";
+  if (d.includes("website")) return "Full-Stack Web Engineering";
+  if (d.includes("study")) return "Learning & Curriculum Design";
+  if (d.includes("creator")) return "Content & Audience Strategy";
+  return "Strategic Execution & Problem Solving";
+}
+
+function extractSoftwareParameters(
+  goal: string,
+  confirmedRequirements: string[],
+  unresolvedAssumptions: string[],
+  budget?: CanonicalProjectSpec["budget"],
+): NonNullable<CanonicalProjectSpec["softwareParams"]> {
+  const allItems = [...confirmedRequirements, ...unresolvedAssumptions];
+  const joined = [goal, ...allItems].join(" | ");
+
+  const stackFact = allItems.find((f) =>
+    /^(?:tech\s*stack|stack|architecture|framework|skills)\s*:/i.test(f),
+  );
+  const integrationFact = allItems.find((f) =>
+    /^(?:integrations?|apis?|services|auth|database)\s*:/i.test(f),
+  );
+  const hostingFact = allItems.find((f) =>
+    /^(?:hosting|deployment|infrastructure)\s*:/i.test(f),
+  );
+
+  const isZeroBudget = Boolean(budget?.isZeroBudget);
+
+  let stack = stackFact
+    ? stackFact.replace(/^[^:]+:\s*/, "").trim()
+    : undefined;
+  if (!stack) {
+    if (/\b(react|vite|next\.?js|tailwind|typescript)\b/i.test(joined)) {
+      stack =
+        "Vite + React 19, TypeScript, Tailwind CSS v4, Lucide React, Zod schema validation";
+    } else if (/\b(python|fastapi|flask|django)\b/i.test(joined)) {
+      stack = "Python 3.12, FastAPI/Pydantic validation, pytest";
+    } else {
+      stack =
+        "Vite + React 19, TypeScript, Tailwind CSS v4, TanStack Query, Zod validation (Defaulted for web execution — adjust if repository uses another stack)";
+    }
+  }
+
+  let integrations = integrationFact
+    ? integrationFact.replace(/^[^:]+:\s*/, "").trim()
+    : undefined;
+  if (!integrations) {
+    if (isZeroBudget) {
+      integrations =
+        "Supabase Free Tier (Auth & PostgreSQL 500MB limit) or local IndexedDB/SQLite storage; zero paid API dependencies [VERIFY: provider quota limits before deployment]";
+    } else if (/\b(stripe|openai|gemini|supabase|auth)\b/i.test(joined)) {
+      integrations =
+        "Configured third-party APIs isolated behind server-side proxy routes with Zod payload validation [VERIFY: provider pricing and rate limits]";
+    } else {
+      integrations =
+        "Minimal external dependencies; Supabase Free Tier (500MB DB limit) or local persistence [VERIFY: provider quota limits]";
+    }
+  }
+
+  let hosting = hostingFact
+    ? hostingFact.replace(/^[^:]+:\s*/, "").trim()
+    : undefined;
+  if (!hosting) {
+    hosting = isZeroBudget
+      ? "Cloudflare Pages or Vercel Hobby/Free Tier [VERIFY: commercial usage terms and bandwidth quotas]"
+      : "Vercel, Cloudflare Pages, or target repository deployment pipeline [VERIFY: provider bandwidth and build limits]";
+  }
+
+  const needsSecretIsolation =
+    /\b(api|stripe|openai|gemini|secret|key|token|auth|supabase|webhook|database_url)\b/i.test(
+      joined,
+    ) || true;
+
+  return {
+    stack,
+    integrations,
+    hosting,
+    needsSecretIsolation,
+    needsFreeTierGuardrails: true,
+  };
+}
+
+function buildSafetyPrivacyAccuracyRules(
+  taskCategory: TaskCategory,
+  budget?: CanonicalProjectSpec["budget"],
+  softwareParams?: CanonicalProjectSpec["softwareParams"],
+  hasLiveWebNeed?: boolean,
+): string[] {
+  const rules: string[] = [];
+
+  if (taskCategory === "software_development") {
+    rules.push(
+      "Secret & API Key Hygiene: Never expose private API keys or database credentials in client-side code; isolate secrets in server-side proxy routes and document variable names in `.env.example`.",
+    );
+    rules.push(
+      "Preserve Existing Behavior: When modifying an existing codebase, scope changes minimally, preserve existing public interfaces, and avoid unrelated refactoring.",
+    );
+    rules.push(
+      "Honest Test & Build Reporting: Never claim that tests, linters, or builds pass unless they were actually executed; explicitly distinguish verified checks from unexecuted commands.",
+    );
+    if (budget?.isZeroBudget) {
+      rules.push(
+        "Zero-Budget Free-Tier Compliance: Strictly respect the $0 budget constraint; use genuinely free tiers (e.g., Supabase 500MB DB, Cloudflare Pages / Vercel Free Tier) and mark any external quota or commercial restriction with `[VERIFY: provider quota limits and terms]`.",
+      );
+    } else {
+      rules.push(
+        "Quota & Pricing Verification: Flag any external service rate limits, storage caps, or pricing tiers with `[VERIFY: provider quota limits and pricing]` rather than guessing.",
+      );
+    }
+  } else if (taskCategory === "research_fact_checking") {
+    rules.push(
+      "Source Credibility Hierarchy: Prioritize primary sources, peer-reviewed literature, official documentation, and regulatory filings over secondary commentary.",
+    );
+    rules.push(
+      "Evidence vs. Inference Separation: Explicitly separate verified empirical facts (backed by citations) from analytical inferences or hypotheses.",
+    );
+    rules.push(
+      "Zero Fabrication: Never invent citations, URLs, DOIs, or statistical figures; mark any claim that cannot be independently verified with `[VERIFY: primary source needed]`.",
+    );
+  } else if (taskCategory === "study_tutoring") {
+    rules.push(
+      "Pedagogical Accuracy: Ensure all conceptual explanations, worked examples, and formulas are factually accurate; flag any curriculum/exam policy detail that varies by institution with `[VERIFY: official exam syllabus]`.",
+    );
+    rules.push(
+      "Active Mastery over Passive Reading: Prioritize diagnostic checkpoints, worked examples, and active recall practice over generic summaries.",
+    );
+  } else if (taskCategory === "business_planning") {
+    rules.push(
+      "Financial & Operational Realism: Ground unit economics, CAC/LTV, and channel assumptions in realistic benchmarks; explicitly separate confirmed facts from modeled financial assumptions.",
+    );
+    rules.push(
+      "Budget & Tooling Feasibility: Respect stated budget boundaries and flag third-party platform pricing or legal/compliance requirements with `[VERIFY: current provider pricing and regulatory terms]`.",
+    );
+  } else if (taskCategory === "creative_work") {
+    rules.push(
+      "Creative & Stylistic Fidelity: Adhere strictly to the requested tone, POV, setting constraints, and stylistic exclusions without inserting meta-commentary or generic tropes.",
+    );
+  } else if (taskCategory === "writing_editing") {
+    rules.push(
+      "Factual & Editorial Integrity: Do not invent quotes, statistics, or source attributions; preserve the author's intended register and honor all word-count and exclusion rules.",
+    );
+  } else if (taskCategory === "data_analysis") {
+    rules.push(
+      "Statistical & Data Integrity: Check for missing values, sample-size limitations, and outliers before drawing conclusions; clearly separate observed correlations from causal claims.",
+    );
+    rules.push(
+      "Privacy & Data Hygiene: Never hardcode or expose personally identifiable information (PII) or sensitive credentials in analysis outputs.",
+    );
+  } else {
+    rules.push(
+      "Factual Accuracy & Constraint Fidelity: Do not invent unrequested requirements or unverified statistics; mark uncertain external facts with `[VERIFY: confirm current details]`.",
+    );
+  }
+
+  if (hasLiveWebNeed && taskCategory !== "research_fact_checking") {
+    rules.push(
+      "Recency & Live Information Boundary: Do not assume access to real-time information unless live search is available; flag time-sensitive figures with `[VERIFY: current data]`.",
+    );
+  }
+
+  return rules;
+}
+
+function getDefaultTaskAcceptanceCriteria(
+  taskCategory: TaskCategory,
+  objective: string,
+  exclusions: string[],
+): string[] {
+  const criteria: string[] = [
+    `Directly fulfills the primary objective ("${objective}") without adding unrequested filler.`,
+  ];
+
+  if (exclusions.length > 0) {
+    criteria.push(
+      `Strictly honors all explicit exclusions (${exclusions.join("; ")}).`,
+    );
+  }
+
+  switch (taskCategory) {
+    case "software_development":
+      criteria.push(
+        "TypeScript/code compiles cleanly (`tsc --noEmit` / `npm run build` exits 0) with runtime input validation (e.g., Zod schemas) at boundary inputs.",
+        "Interactive views handle loading states, empty states, and error recovery without exposing private API keys in client bundles.",
+        "Existing behavior outside the target scope is preserved, and test results are reported honestly (distinguishing executed tests from unrun checks).",
+      );
+      break;
+    case "research_fact_checking":
+      criteria.push(
+        "Every major factual or quantitative claim is paired with a credible source citation or explicitly marked `[VERIFY: source required]`.",
+        "Verified evidence is clearly separated from analytical inference, and conflicting evidence across sources is explicitly noted.",
+      );
+      break;
+    case "study_tutoring":
+      criteria.push(
+        "Includes clear learning milestones, step-by-step worked examples, and active-recall practice questions with diagnostic answer keys.",
+        "Pacing and prerequisite depth match the learner's stated level and timeline constraints.",
+      );
+      break;
+    case "business_planning":
+      criteria.push(
+        "Includes concrete unit economics, customer acquisition workflow, milestone schedule, and risk mitigation grounded in the stated budget.",
+        "Separates confirmed operational facts from modeled financial assumptions and flags unverified external costs with `[VERIFY: ...]`. ",
+      );
+      break;
+    case "creative_work":
+      criteria.push(
+        "Delivers the complete creative work or structured narrative blueprint matching the specified tone, perspective, and world/character constraints.",
+        "Avoids generic clichés and respects all stated stylistic exclusions.",
+      );
+      break;
+    case "writing_editing":
+      criteria.push(
+        "Produces publication-ready prose matching the target audience, tone/register, structural outline, and length constraints.",
+        "Eliminates filler, preserves factual accuracy without fabricated quotes/stats, and satisfies all editorial exclusions.",
+      );
+      break;
+    case "data_analysis":
+      criteria.push(
+        "Specifies exact data cleaning, edge-case/missing-data handling, analytical methodology, and structured interpretation of results.",
+        "Separates empirical observations from causal hypotheses and flags data-quality limitations transparently.",
+      );
+      break;
+    case "general_purpose":
+      criteria.push(
+        "Provides a complete, actionable deliverable structured for immediate execution with explicit verification checkpoints.",
+      );
+      break;
+  }
+
+  return criteria;
+}
+
+/**
+ * Generates all 7 model-specific prompts from the validated ProjectProfile / context.
+ */
+export function generateOptimizedPrompts(
+  goal: string,
+  facts: string[] = [],
+  domain?: string,
+  context?: OptimizationContext,
+): MultiModelPrompts {
+  const spec = buildCanonicalProjectSpec(goal, facts, domain, context);
+
+  return {
+    chatgpt: generateChatGPTNative(spec),
+    claude: generateClaudeNative(spec),
+    gemini: generateGeminiNative(spec),
+    perplexity: generatePerplexityNative(spec),
+    grok: generateGrokNative(spec),
+    cursor: generateCursorNative(spec),
+    windsurf: generateWindsurfNative(spec),
+  };
+}
+
+/**
+ * Ensures all 7 models have complete, genuinely distinct, context-rich prompts.
+ * Preserves all confirmed requirements, exclusions, assumptions, and contradictions
+ * from the canonical project specification across every target platform.
+ */
+export function ensureAllSevenModels(
+  parsedPrompts: Partial<Record<ModelKey, string>>,
+  context: {
+    goal?: string;
+    expertDomain?: string;
+    facts?: string[];
+    budget?: string;
+    projectProfile?: ProjectProfile;
+  },
+): MultiModelPrompts {
+  const anyExisting = Object.values(parsedPrompts).find(
+    (p) => p && p.trim().length > 40,
+  );
+
+  const cleanGoal =
+    context.projectProfile?.primaryGoal?.value ||
+    context.goal?.trim() ||
+    (anyExisting
+      ? extractSection(anyExisting, [
+          /(?:Goal|Objective|Target|Mission)\s*[:=-]\s*([^\n]+)/i,
+          /<goal>([\s\S]*?)<\/goal>/i,
+        ])
+      : null) ||
+    "Complete the specified project objective";
+
+  const extractedFacts = [...(context.facts ?? [])];
+  if (anyExisting && extractedFacts.length === 0) {
+    const contextLines = extractContextLines(anyExisting);
+    extractedFacts.push(...contextLines);
+  }
+
+  const optContext: OptimizationContext = {
+    goal: cleanGoal,
+    expertDomain: context.expertDomain,
+    domain: context.expertDomain,
+    facts: extractedFacts,
+    budget: context.budget ?? context.projectProfile?.budget?.value,
+    projectProfile: context.projectProfile,
+  };
+
+  const spec = buildCanonicalProjectSpec(
+    cleanGoal,
+    extractedFacts,
+    context.expertDomain,
+    optContext,
+  );
+
+  const generated = generateOptimizedPrompts(
+    cleanGoal,
+    extractedFacts,
+    context.expertDomain,
+    optContext,
+  );
+
+  const result = {} as MultiModelPrompts;
+
+  for (const model of ALL_MODELS) {
+    const existing = parsedPrompts[model.key]?.trim();
+    if (existing && existing.length > 50) {
+      result[model.key] = enforceCanonicalPreservation(
+        existing,
+        spec,
+        model.key,
+      );
+    } else {
+      result[model.key] = generated[model.key];
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Ensures that a pre-existing / LLM-streamed platform prompt does not drop
+ * critical canonical items (confirmed requirement values, explicit exclusions,
+ * unresolved contradictions, or active assumptions).
+ */
+function enforceCanonicalPreservation(
+  promptText: string,
+  spec: CanonicalProjectSpec,
+  modelKey: ModelKey,
+): string {
+  const lower = promptText.toLowerCase();
+
+  // Check confirmed requirements by their value (not just the slot label!)
+  const missingConfirmed = spec.confirmedRequirements.filter((req) => {
+    const colonIdx = req.indexOf(":");
+    const valPart = (colonIdx >= 0 ? req.slice(colonIdx + 1) : req)
+      .trim()
+      .toLowerCase();
+    const probe = valPart.slice(0, Math.min(28, valPart.length));
+    return probe.length > 2 && !lower.includes(probe);
+  });
+
+  // Check explicit exclusions
+  const missingExclusions = spec.explicitExclusions.filter(
+    (ex) => !lower.includes(ex.toLowerCase().slice(0, 18)),
+  );
+
+  // Check unresolved contradictions
+  const missingConflicts = spec.unresolvedContradictions.filter(
+    (c) => !lower.includes(c.split(":")[0].toLowerCase()),
+  );
+
+  // Check active assumptions
+  const missingAssumptions = spec.unresolvedAssumptions.filter((a) => {
+    const colonIdx = a.indexOf(":");
+    const valPart = (colonIdx >= 0 ? a.slice(colonIdx + 1) : a)
+      .replace(/\s*\((?:inferred|assumed)\)\s*$/i, "")
+      .trim()
+      .toLowerCase();
+    const probe = valPart.slice(0, Math.min(24, valPart.length));
+    return probe.length > 2 && !lower.includes(probe);
+  });
+
+  if (
+    missingConfirmed.length === 0 &&
+    missingExclusions.length === 0 &&
+    missingConflicts.length === 0 &&
+    missingAssumptions.length === 0
+  ) {
+    return promptText;
+  }
+
+  if (modelKey === "claude") {
+    const xmlNodes: string[] = [];
+    for (const req of missingConfirmed) {
+      xmlNodes.push(`  <confirmed_requirement>${req}</confirmed_requirement>`);
+    }
+    for (const ex of missingExclusions) {
+      xmlNodes.push(`  <explicit_exclusion>${ex}</explicit_exclusion>`);
+    }
+    for (const c of missingConflicts) {
+      xmlNodes.push(`  <unresolved_conflict>${c}</unresolved_conflict>`);
+    }
+    for (const a of missingAssumptions) {
+      xmlNodes.push(`  <active_assumption>${a}</active_assumption>`);
+    }
+    if (promptText.includes("</context>")) {
+      return promptText.replace(
+        "</context>",
+        `${xmlNodes.join("\n")}\n</context>`,
+      );
+    }
+    return `${promptText}\n<context>\n${xmlNodes.join("\n")}\n</context>`;
+  }
+
+  const missingBlocks: string[] = [];
+  if (missingConfirmed.length > 0) {
+    missingBlocks.push(missingConfirmed.map((r) => `- ${r}`).join("\n"));
+  }
+  if (missingExclusions.length > 0) {
+    missingBlocks.push(
+      `Explicit Exclusions:\n${missingExclusions.map((e) => `- ${e}`).join("\n")}`,
+    );
+  }
+  if (missingConflicts.length > 0) {
+    missingBlocks.push(
+      `Unresolved Requirement Conflicts to Address:\n${missingConflicts.map((c) => `- ${c}`).join("\n")}`,
+    );
+  }
+  if (missingAssumptions.length > 0) {
+    missingBlocks.push(
+      `Explicit Inferred / Assumed Parameters:\n${missingAssumptions.map((a) => `- ${a}`).join("\n")}`,
+    );
+  }
+
+  return `${promptText}\n\n# CONTEXT & CONFIRMED REQUIREMENTS\n${missingBlocks.join("\n\n")}`;
+}
+
+// ----------------------------------------------------------------------------
+// Shared Canonical Section Builders
+// ----------------------------------------------------------------------------
+
+function formatCanonicalContextBlock(spec: CanonicalProjectSpec): string {
+  const lines: string[] = [];
+  lines.push(`- Primary Objective: ${spec.objective}`);
+  lines.push(`- Task Category: ${spec.taskCategoryLabel}`);
+  if (spec.audience) {
+    const tag =
+      spec.audience.status === "confirmed"
+        ? "Confirmed"
+        : spec.audience.status === "inferred"
+          ? "Inferred"
+          : "Assumed";
+    lines.push(`- Target Audience (${tag}): ${spec.audience.value}`);
+  }
+  if (spec.deliverable) {
+    const tag =
+      spec.deliverable.status === "confirmed"
+        ? "Confirmed"
+        : spec.deliverable.status === "inferred"
+          ? "Inferred"
+          : "Assumed";
+    lines.push(
+      `- Target Deliverable (${tag}): ${spec.deliverable.value}${spec.deliverable.format && spec.deliverable.format !== spec.deliverable.value ? ` (Format: ${spec.deliverable.format})` : ""}`,
+    );
+  }
+  for (const req of spec.confirmedRequirements) {
+    lines.push(`- Confirmed Requirement: ${req}`);
+  }
+  for (const fr of spec.functionalRequirements) {
+    lines.push(`- Functional Requirement: ${fr}`);
+  }
+  for (const nfr of spec.nonFunctionalRequirements) {
+    lines.push(`- Non-Functional Requirement: ${nfr}`);
+  }
+  return lines.join("\n");
+}
+
+function formatConstraintsAndExclusionsBlock(
+  spec: CanonicalProjectSpec,
+): string {
+  const lines: string[] = [];
+  if (spec.budget) {
+    lines.push(
+      `- Budget Boundary: ${spec.budget.value}${spec.budget.isZeroBudget ? " (Strictly $0 / Free-Tier only — no paid subscriptions or unverified billing requirements)" : ""}`,
+    );
+  }
+  if (spec.timeline) {
+    lines.push(`- Timeline / Schedule: ${spec.timeline.value}`);
+  }
+  for (const c of spec.constraints) {
+    if (
+      !lines.some((l) => l.toLowerCase().includes(c.toLowerCase().slice(0, 20)))
+    ) {
+      lines.push(`- Constraint: ${c}`);
+    }
+  }
+  if (spec.explicitExclusions.length > 0) {
+    for (const ex of spec.explicitExclusions) {
+      lines.push(`- EXPLICIT EXCLUSION (Do Not Include): ${ex}`);
+    }
+  } else {
+    lines.push(
+      "- Scope Discipline: Do not invent unrequested features, unrelated tools, or speculative requirements.",
+    );
+  }
+  return lines.join("\n");
+}
+
+function formatAssumptionsAndConflictsBlock(
+  spec: CanonicalProjectSpec,
+): string {
+  const lines: string[] = [];
+  if (spec.unresolvedAssumptions.length > 0) {
+    lines.push(
+      "Active Assumptions (Keep Labeled — Do Not Treat as Confirmed Facts):",
+    );
+    for (const a of spec.unresolvedAssumptions) {
+      lines.push(`  • ${a}`);
+    }
+  }
+  if (spec.unresolvedContradictions.length > 0) {
+    lines.push("Unresolved Contradictions Requiring Transparent Handling:");
+    for (const c of spec.unresolvedContradictions) {
+      lines.push(`  • [UNRESOLVED CONFLICT DISCLOSURE] ${c}`);
+    }
+  }
+  if (spec.unresolvedQuestions.length > 0) {
+    lines.push("Open Questions / Unspecified Details:");
+    for (const q of spec.unresolvedQuestions) {
+      lines.push(`  • ${q}`);
+    }
+  }
+  if (lines.length === 0) {
+    return "- All core parameters are confirmed; no unresolved conflicts detected.";
+  }
+  return lines.join("\n");
+}
+
+function formatTaskSpecificStructure(spec: CanonicalProjectSpec): string {
+  const sp = spec.softwareParams;
+  switch (spec.taskCategory) {
+    case "software_development":
+      return `1. Architecture & Stack Specification:
+   - Target Stack: ${sp?.stack}
+   - Integrations & Storage: ${sp?.integrations}
+   - Hosting & Runtime Target: ${sp?.hosting}
+2. Component, Data Model & State Design:
+   - Define concrete data structures/interfaces directly required by "${spec.objective}".
+   - Implement runtime input validation (e.g., Zod schemas) on external inputs, forms, and API payloads.
+   - Cover interactive UI/UX states where applicable: loading skeletons, informative empty states, and localized error boundaries/retry handlers.
+3. Codebase Preservation & Security Hygiene:
+   - Isolate private credentials in server-side routes; document required variables in \`.env.example\`.
+   - Preserve existing application behavior outside the requested scope; make minimal, well-scoped edits.
+4. Verification & Honest Test Reporting:
+   - Separate Phase 1 MVP essentials from optional Phase 2 enhancements.
+   - Specify exact verification commands (\`tsc --noEmit\`, \`npm run build\`, test runner) and report test outcomes honestly without claiming unexecuted checks passed.`;
+
+    case "research_fact_checking":
+      return `1. Primary Research Questions & Scope:
+   - Break "${spec.objective}" into falsifiable sub-questions grounded in the confirmed context.
+2. Source Standards & Credibility Hierarchy:
+   - Prioritize primary empirical data, peer-reviewed literature, official documentation, and regulatory records.
+   - Provide inline citations for every factual, historical, or quantitative claim.
+3. Evidence vs. Inference Matrix:
+   - Present a structured breakdown distinguishing:
+     a) **Verified Evidence** (directly supported by cited primary sources),
+     b) **Analytical Inference** (reasoned conclusions drawn from the evidence), and
+     c) **Unverified / Open Claims** (marked with \`[VERIFY: specific source needed]\`).
+4. Synthesis & Counter-Evidence Review:
+   - Surface methodological limitations, conflicting studies, or recency gaps transparently.`;
+
+    case "study_tutoring":
+      return `1. Diagnostic Baseline & Learning Objectives:
+   - Calibrate explanations to the learner's profile (${spec.audience?.value || "stated skill level"}) and timeline (${spec.timeline?.value || "structured progression"}).
+2. Structured Concept Breakdown & Worked Examples:
+   - Explain core principles concisely from first principles, followed immediately by step-by-step worked examples showing common pitfalls.
+3. Active Recall & Practice Drills:
+   - Provide graduated practice exercises (foundational -> applied -> synthesis) with diagnostic answer keys and explanations of why incorrect options fail.
+4. Spaced Repetition & Mastery Checkpoints:
+   - Define concrete self-assessment checkpoints and review intervals to verify retention before advancing.`;
+
+    case "business_planning":
+      return `1. Value Proposition & Target Segment Alignment:
+   - Define the exact customer problem, target buyer persona (${spec.audience?.value || "core market segment"}), and offer positioning for "${spec.objective}".
+2. Unit Economics & Budget-Realistic Financial Model:
+   - Detail pricing structure, cost drivers, customer acquisition cost (CAC) assumptions, and margin targets within the stated budget (${spec.budget?.value || "lean capital constraints"}).
+   - Clearly separate confirmed operational numbers from modeled projections; flag external pricing/regulatory figures with \`[VERIFY: current market rate]\`.
+3. Go-To-Market & Execution Roadmap:
+   - Provide a phased action plan (Phase 1 Validation MVP vs. Phase 2 Scale) with concrete acquisition channels and conversion milestones.
+4. Operational Risks & Mitigation Matrix:
+   - Identify top commercial, execution, and resource bottlenecks with concrete fallback triggers.`;
+
+    case "creative_work":
+      return `1. Creative Brief & Aesthetic Foundation:
+   - Establish voice, point of view, tonal register, and world/setting rules tailored to "${spec.objective}".
+2. Structural Arc & Scene / Concept Progression:
+   - Organize the piece with purposeful pacing, tension, and sensory or conceptual specificity rather than generic exposition.
+3. Character, Voice & Stylistic Discipline:
+   - Honor all confirmed constraints and explicit exclusions (${spec.explicitExclusions.join("; ") || "avoid clichés and melodramatic filler"}).
+4. Complete Creative Deliverable:
+   - Produce the requested creative work directly in the target format (${spec.deliverable?.value || "complete draft / treatment"}) without meta-commentary.`;
+
+    case "writing_editing":
+      return `1. Editorial Brief, Audience & Register:
+   - Target Reader: ${spec.audience?.value || "Intended readership"}
+   - Tone & Format: ${spec.deliverable?.value || "Publication-ready prose"}
+2. Thesis, Narrative Flow & Section Architecture:
+   - Lead with a clear central argument or hook; structure transitions logically so every paragraph advances the core message.
+3. Evidence & Clarity Rules:
+   - Use concrete, concise language; eliminate throat-clearing, passive filler, and repetitive phrasing.
+   - Never fabricate quotes, citations, or statistics; flag any placeholder fact with \`[VERIFY: source fact]\`.
+4. Final Editorial Polish:
+   - Verify compliance with all length, formatting, and exclusion constraints (${spec.explicitExclusions.join("; ") || "zero fluff"}).`;
+
+    case "data_analysis":
+      return `1. Analytical Objective & Dataset Schema Assumptions:
+   - Define the exact questions, target metrics, and expected schema/variables for "${spec.objective}".
+2. Data Quality, Cleaning & Edge-Case Protocol:
+   - Specify checks for missing values, duplicates, outliers, sample-size sufficiency, and time-zone/unit normalization.
+3. Methodology & Quantitative Execution:
+   - Provide the exact queries, scripts, formulas, or statistical tests required, explaining why each method fits the data distribution.
+4. Interpretation & Inference Boundary:
+   - Separate observed descriptive findings from causal inferences; outline recommended visualizations and decision thresholds.`;
+
+    case "general_purpose":
+    default:
+      return `1. Scope & Deliverable Definition:
+   - Execute "${spec.objective}" directly in the requested format (${spec.deliverable?.value || "structured actionable output"}).
+2. Step-by-Step Execution Plan:
+   - Organize the response into logical, self-contained sections grounded in confirmed requirements.
+3. Constraint & Assumption Handling:
+   - Respect all stated constraints and exclusions; keep any necessary assumptions explicitly labeled.
+4. Quality Verification Checklist:
+   - Validate completeness, factual accuracy, and alignment with acceptance criteria before concluding.`;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 7 Distinct Model-Specific Prompt Generators
+// ----------------------------------------------------------------------------
+
+function generateChatGPTNative(spec: CanonicalProjectSpec): string {
+  const roleTitle = getRoleForTask(spec);
+  const feasibilityHeading =
+    spec.taskCategory === "software_development" || spec.budget
+      ? "# TECHNICAL FEASIBILITY, FREE-TIER & BUDGET GUARDRAILS"
+      : "# OPERATIONAL FEASIBILITY, CONSTRAINTS & GUARDRAILS (TECHNICAL FEASIBILITY)";
+
+  const feasibilityDetails =
+    spec.taskCategory === "software_development"
+      ? `- Stated Budget Constraint: ${spec.budget?.value || "Optimize for lean/free-tier execution"}
+- Verified Free-Tier & Quota Guardrails: Use Supabase Free Tier (500MB PostgreSQL database storage limit, 1GB file storage) or local storage, and Vercel Free Tier / Cloudflare Pages for hosting when operating on a $0 budget. Mark unverified provider limits with \`[VERIFY: provider quota limits and commercial terms]\`.
+- Secret Isolation: Never expose private API keys in client-side bundles; route secret calls through server-side proxy endpoints and document variables in \`.env.example\`.`
+      : `${formatConstraintsAndExclusionsBlock(spec)}
+- Verification Rule: Flag any unverified external quota, pricing, or empirical claim with \`[VERIFY: confirm current source/limit]\` rather than inventing figures.`;
 
   return `# ROLE & IDENTITY
-Act as an elite ${role}. You have world-class expertise in technical feasibility, software architecture, and production delivery.
+Act as a ${roleTitle} specializing in ${spec.domainLabel}.
 
 # PRIMARY OBJECTIVE
-${goal}
+"${spec.objective}"
 
 # CONTEXT & CONFIRMED REQUIREMENTS
-${facts.length > 0 ? facts.map((f) => `- ${f}`).join("\n") : "- Execute based on verified operational requirements."}
+${formatCanonicalContextBlock(spec)}
 
-# TECHNICAL FEASIBILITY & BUDGET CONSTRAINTS
-- **Capital & Budget Limit**: ${budgetStr}
-- **Free-Tier Limits & Quotas**:
-  ${
-    isZeroBudget
-      ? `• Hosting: ${hosting}. Adhere strictly to serverless execution limits (10s execution timeout on hobby tiers).
-  • Database & Storage: Supabase Free Tier (500MB PostgreSQL storage, 50,000 monthly active users for Auth; [VERIFY: 1-week pause policy on inactivity]) or Firebase Spark Free Plan (1GB Firestore stored, 50k reads/day; zero credit card required). For simple or single-user projects, prioritize client-side storage (IndexedDB / localStorage) to avoid backend costs.
-  • Email/Messaging: Resend Free Tier (3,000 emails/mo, 100/day limit; [VERIFY: requires custom domain DNS verification]) or zero-cost mailto fallback. Never assume paid SMS or twilio integration.`
-      : `• Respect operational budgets. Differentiate genuinely free services from trial services requiring credit cards.
-  • Keep external API usage within free limits where available.`
-  }
-- **Realistic Zero-Cost Alternatives**:
-  • Use email magic links or WebAuthn instead of paid SMS gateways.
-  • Use client-side WebGPU / free Google Gemini API quotas (15 RPM free tier) instead of dedicated GPU clusters.
-  • Distinguish essential Phase 1 MVP features from optional Phase 2 enhancements.
-- **Environment Variables & Secrets Security**:
-  • All private API keys must remain strictly server-side (never prefixed with public bundler prefixes like VITE_).
-  • Include a documented \`.env.example\` with public vs secret classifications.
+${feasibilityHeading}
+${feasibilityDetails}
 
-# EXACT TECHNOLOGY STACK & ARCHITECTURE
-- **Frontend & UI**: ${stack}
-- **State Management & Data Fetching**: TanStack Query (React Query) for server state caching and optimistic updates.
-- **Validation**: Zod runtime schema validation on all user forms and incoming network payloads.
-- **Icons & Styling**: Lucide React icons, Tailwind CSS v4 utility classes.
-- **Integrations**: ${integrations}
+# CONSTRAINTS & EXPLICIT EXCLUSIONS
+${formatConstraintsAndExclusionsBlock(spec)}
 
-# FUNCTIONAL REQUIREMENTS & USER JOURNEYS
-- **FR-1 (Core Onboarding / Entry)**: Immediate value delivery within 10 seconds of landing.
-- **FR-2 (Primary User Flow)**: Interactive workspace with instant feedback, live preview, and validation.
-- **FR-3 (Data Persistence & Export)**: Reliable save/load mechanism with local fallback (localStorage/IndexedDB) when offline.
-- **Edge Cases**: Empty input submission, offline network disconnection, rate-limit 429 throttling, and malformed server payloads.
+# UNRESOLVED ASSUMPTIONS & CONFLICTS
+${formatAssumptionsAndConflictsBlock(spec)}
 
-# UX STATES & OPERATIONAL PROTOCOL
-1. **Input Validation**: Real-time inline feedback via Zod schema parsing; disable submit buttons until inputs are valid.
-2. **Loading States**: Layout-matched skeleton placeholders; spinners with descriptive progress text during async actions.
-3. **Empty States**: High-contrast guidance cards with direct primary action button (no blank screens).
-4. **Error Handling**: React Error Boundaries wrapping page roots, toast notifications for transient failures, and retry triggers.
-5. **Accessibility & Responsive**: Full WCAG AA color contrast compliance, keyboard navigation, and mobile viewport adaptability (375px+).
+# TASK EXECUTION & DELIVERABLE STRUCTURE (${spec.taskCategoryLabel.toUpperCase()})
+${formatTaskSpecificStructure(spec)}
 
-# DELIVERABLES, DEFINITION OF DONE & ACCEPTANCE CRITERIA
-- **Concrete Deliverables**: Complete production source code, \`.env.example\`, README with setup commands, and unit tests.
-- **Definition of Done (DoD)**:
-  1. Zero TypeScript errors (\`tsc --noEmit\` exits 0).
-  2. Zero secrets exposed in browser client bundles.
-  3. All user flows verified end-to-end with loading, empty, and error fallback states.
-- **Testable Acceptance Criteria**:
-  • GIVEN a new user enters valid inputs, WHEN they click submit, THEN the state transitions to loading and displays results within 1.5s.
-  • GIVEN an empty or invalid form, WHEN submitted, THEN field-level validation errors highlight the exact issue without a network call.`;
+# SAFETY, PRIVACY & ACCURACY REQUIREMENTS
+${spec.safetyPrivacyAccuracy.map((r) => `- ${r}`).join("\n")}
+
+# DELIVERABLES & DEFINITION OF DONE (ACCEPTANCE CRITERIA)
+${spec.acceptanceCriteria.map((c, idx) => `${idx + 1}. [PASS/FAIL] ${c}`).join("\n")}
+
+# ITERATION & REFINEMENT PROTOCOL
+- Produce the complete primary deliverable first based on the confirmed specification above.
+- At the end of the response, list up to 2 targeted follow-up refinement options in case the user wants to adjust any labeled assumption or deepen a specific section.`;
 }
 
-function generateClaudeNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const role = getDomainRole(domain);
-  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
-    extractParameters(facts, context);
+function generateClaudeNative(spec: CanonicalProjectSpec): string {
+  const roleTitle = getRoleForTask(spec);
 
   return `<role>
-You are an expert ${role} celebrated for intellectual rigor, technical feasibility, and nuanced architectural design.
+You are a ${roleTitle} specializing in ${spec.domainLabel}. Execute the project specification below with precision, structural clarity, and strict fidelity to confirmed requirements.
 </role>
 
-<context>
-The following verified facts, constraints, and operational context govern this initiative:
-${facts.map((f) => `• ${f}`).join("\n") || "• Target production-grade excellence with realistic operational constraints."}
-</context>
-
 <goal>
-${goal}
+${spec.objective}
 </goal>
 
+<context>
+${formatCanonicalContextBlock(spec)}
+</context>
+
+<priorities>
+1. Honor Confirmed Facts & Explicit Exclusions: Never override user-confirmed requirements or reintroduce excluded items.
+2. Task-Matched Execution (${spec.taskCategoryLabel}): Structure the deliverable specifically for ${spec.taskCategoryLabel.toLowerCase()} without injecting unrelated boilerplate.
+3. Transparent Assumption & Conflict Handling: Keep inferred or assumed parameters explicitly labeled, and surface any unresolved conflicts directly.
+</priorities>
+
 <technical_feasibility>
-- Budget Constraint: ${budgetStr}
-- Free-Tier Guardrails & Limits:
-  ${
-    isZeroBudget
-      ? `• Hosting: ${hosting} (Strict 10s serverless function timeout; bandwidth ceiling 100GB/mo; [VERIFY: commercial eligibility]).
-  • Database: When persistence is required, consider Supabase free tier (500MB DB storage, 50k MAU Auth; [VERIFY: provider pause policy on inactive projects]). For simple client apps, omit backend database.
-  • Never prescribe services requiring credit-card billing activation. Provide zero-cost realistic alternatives for expensive features (e.g. Email magic links instead of SMS; client-side/free API quotas instead of paid GPU clusters).`
-      : `• Enforce strict cost ceilings. Separate essential Phase 1 MVP features from optional Phase 2 enhancements.`
-  }
-- Secrets Management: Isolate all private secrets to server environments; provide .env.example with public vs secret classification.
+${formatConstraintsAndExclusionsBlock(spec)}
+${
+  spec.taskCategory === "software_development"
+    ? `- Target Stack: ${spec.softwareParams?.stack}
+- Integrations & Quotas: ${spec.softwareParams?.integrations}
+- Hosting Target: ${spec.softwareParams?.hosting}
+- Secret Protection: Isolate private keys in server-side routes and document in .env.example.`
+    : `- Accuracy & Feasibility Guardrails:\n${spec.safetyPrivacyAccuracy.map((r) => `  • ${r}`).join("\n")}`
+}
 </technical_feasibility>
 
-<technology_stack>
-- Core Framework: ${stack}
-- Data Validation: Zod schema parsing across all network and form boundaries.
-- Component Architecture: Modular, single-responsibility components with clean separation between business logic, state stores, and UI view layers.
-- Integrations: ${integrations}
-</technology_stack>
+<unresolved_assumptions_and_conflicts>
+${formatAssumptionsAndConflictsBlock(spec)}
+</unresolved_assumptions_and_conflicts>
 
-<functional_specifications>
-- Primary Pages & Routes: Landing/Welcome view, Core Interactive Workspace, Settings/Configuration drawer, and Saved Artifacts view.
-- User Flows: Guided workflow with step-by-step progress, auto-save persistence, and instant export.
-- State Handling:
-  • Loading: Shimmer skeleton placeholders matching layout geometry.
-  • Empty States: Clear instructional prompt with a primary call-to-action button.
-  • Error States: Localized try/catch error boundaries with actionable toast alerts and retry buttons.
-- Edge Cases: Network timeout, malformed payloads, rate-limit throttling (HTTP 429), and mobile screen breakpoints.
-</functional_specifications>
+<deliverable_structure>
+${formatTaskSpecificStructure(spec)}
+</deliverable_structure>
 
-<acceptance_criteria_and_dod>
-- Definition of Done (DoD):
-  1. Build succeeds with zero TypeScript errors or broken imports.
-  2. All forms validate with Zod and provide instant feedback.
-  3. Works smoothly across mobile (375px) and desktop viewports with WCAG AA compliance.
-- Testable Acceptance Criteria:
-  • Given valid input, when the user triggers the action, then state transitions from loading to success without page reload.
-  • Given a failed API call, when an error occurs, then a user-friendly error message displays with an actionable retry button.
-</acceptance_criteria_and_dod>
-
-<instructions>
-1. Begin your response by thinking through the architectural trade-offs, free-tier limits, and edge cases inside <thinking>...</thinking> tags.
-2. Deliver a complete, unambiguous technical blueprint and implementation instructions with complete code and configurations.
-3. Avoid vague advice such as "ensure security" or "make it modern" — provide exact libraries, configurations, and code structures.
-</instructions>`;
+<verification_and_acceptance_criteria>
+Verify that your output satisfies every criterion below before finalizing:
+${spec.acceptanceCriteria.map((c) => `- [VERIFY PASS/FAIL] ${c}`).join("\n")}
+</verification_and_acceptance_criteria>`;
 }
 
-function generateGeminiNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const role = getDomainRole(domain);
-  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
-    extractParameters(facts, context);
+function generateGeminiNative(spec: CanonicalProjectSpec): string {
+  const roleTitle = getRoleForTask(spec);
+  const multimodalSection = spec.hasMultimodalContext
+    ? `\n## Multimodal Input & Artifact Handling
+- This project involves multimodal assets or visual/document inputs. Inspect all attached images, PDFs, diagrams, audio, or video frames directly and ground your synthesis in the primary media.`
+    : "";
 
-  return `Task: Architect and deliver an end-to-end execution specification for: ${goal}
-Expert Specialty: ${role}
+  return `# System Role & Task Definition
+- **Role:** ${roleTitle} (${spec.domainLabel})
+- **Primary Objective:** "${spec.objective}"
+- **Task Classification:** ${spec.taskCategoryLabel}
 
-Context Parameters:
-${facts.map((f) => `  * ${f}`).join("\n") || "  * Production-grade standards; zero conversational fluff."}
+## Context Parameters & Confirmed Requirements
+${formatCanonicalContextBlock(spec)}
 
-Technical Feasibility & Free-Tier Guardrails:
-  - Budget Limit: ${budgetStr}
-  - Service Tiers: ${isZeroBudget ? "Zero-cost architecture using verified free-tier allowances (e.g. Cloudflare Pages, Supabase Free Tier, Resend Free Tier, Gemini API standard free tier). Note: verify provider terms for commercial projects." : "Respect defined budget boundaries."}
-  - Quotas to Monitor: Storage limits (500MB DB), bandwidth limits (100GB/mo), rate limits (15 RPM for free AI models; [VERIFY: provider quota limits before deployment]).
-  - Zero-Cost Fallbacks: Magic links instead of paid SMS; client-side processing where possible; essential Phase 1 MVP separated from optional Phase 2.
-  - Secret Key Hygiene: Server-side proxy routing for all private API keys; zero secret leakage in client bundle.
+## Constraints, Budget & Explicit Exclusions
+${formatConstraintsAndExclusionsBlock(spec)}
 
-Exact Stack & Tooling:
-  - Frontend: ${stack}
-  - Data Validation: Zod schemas on all input interfaces
-  - Data Persistence & Auth: ${integrations}
-  - Hosting & Deployment: ${hosting}
+## Unresolved Assumptions & Contradictions
+${formatAssumptionsAndConflictsBlock(spec)}${multimodalSection}
 
-Data Models & Schemas:
-  - UserProfile: { id: string, email: string, preferences: Record<string, unknown>, createdAt: timestamp }
-  - ProjectArtifact: { id: string, userId: string, title: string, content: string, status: 'draft'|'active'|'archived', updatedAt: timestamp }
+## Task-Matched Execution Plan & Deliverable Specification
+${formatTaskSpecificStructure(spec)}
 
-Execution Directives:
-1. High-Density Synthesis: Provide direct, high-signal instructions with complete working code.
-2. State Handling: Mandate layout-matched loading skeletons, empty state callouts, and localized error boundaries.
-3. Anti-Hallucination Guardrails: Every tool, framework, library, and metric must exist, be actively maintained, and be compatible with stated zero-cost/budget constraints.
+## Safety, Privacy & Factual Accuracy Guardrails
+${spec.safetyPrivacyAccuracy.map((r) => `- ${r}`).join("\n")}
 
-Definition of Done & Verification Schema:
-  - [PASS/FAIL] TypeScript compilation passes cleanly (\`tsc --noEmit\`).
-  - [PASS/FAIL] All environment variables documented in \`.env.example\` with public/secret tags.
-  - [PASS/FAIL] Input validation, loading skeletons, empty states, and error toasts verified.
-  - [PASS/FAIL] Responsive mobile layout (375px+) and WCAG AA contrast verified.`;
+## Acceptance Criteria & Verification Schema
+| # | Verification Criterion | Status Requirement |
+| :--- | :--- | :--- |
+${spec.acceptanceCriteria.map((c, i) => `| ${i + 1} | ${c.replace(/\|/g, "/")} | Must Pass |`).join("\n")}`;
 }
 
-function generatePerplexityNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
-    extractParameters(facts, context);
+function generatePerplexityNative(spec: CanonicalProjectSpec): string {
+  const researchQuestions = buildPerplexityResearchQuestions(spec);
 
   return `[SEARCH & VERIFICATION DIRECTIVES]
-Search Intent: Conduct an authoritative, source-verified investigation and strategic blueprint for: "${goal}"
+Primary Objective: "${spec.objective}"
+Task Domain: ${spec.taskCategoryLabel} (${spec.domainLabel})
 
-Investigation Scope & Domain Facts:
-${facts.map((f) => `  • Target parameter: ${f}`).join("\n") || "  • Contemporary industry benchmark standards (Current Year)"}
+## 1. Confirmed Context & Scope Boundaries
+${formatCanonicalContextBlock(spec)}
 
-Search & Recency Rules:
-1. Ground all recommendations in verified, recent documentation and official release notes.
-2. In-Line Source Attribution: Support all tooling trade-offs, pricing models, free-tier quotas, and compliance standards with citations.
-3. Free-Tier & Pricing Landscape Audit:
-   • Validate whether recommended services (e.g. ${hosting}, ${integrations}) offer genuinely free tiers vs free trials requiring credit-card billing activation.
-   • Audit known free-tier limits: storage limits, bandwidth limits, serverless cold starts, and rate limits.
-   • Explicitly note: [VERIFY: provider pricing/quota limits] for any unconfirmed metrics.
+## 2. Constraints & Explicit Exclusions
+${formatConstraintsAndExclusionsBlock(spec)}
 
-Tooling & Integration Trade-Offs Matrix:
-- Provide a comparative markdown table: [Tool/Platform, Free Tier Allowance, Hard Quota Limits, Hidden Costs/Billing Gotchas, Recommended Use Case].
-- Contrast primary stack (${stack}) against lean alternatives.
+## 3. Core Research & Verification Questions
+${researchQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 
-Structured Report Format:
-- **Verified Industry Landscape**: Consensus best practices and production benchmarks.
-- **Free-Tier Feasibility Matrix**: Verified zero-cost boundaries and realistic fallbacks.
-- **Step-by-Step Implementation Roadmap**: Phased execution plan separating Phase 1 MVP from Phase 2 enhancements.
-- **Critical Failure Modes & Rate Limits**: Known pitfalls verified by active developer community reports.`;
+## 4. Source Credibility & Citation Standards
+- Prioritize primary sources: official documentation, peer-reviewed research, regulatory/standards bodies, and primary vendor pricing/quota pages.
+- Include inline citations (e.g., [1], [2]) for every empirical, technical, or quantitative claim.
+- Do not fabricate citations or URLs. If a specific figure or claim cannot be verified from retrieved sources, mark it explicitly with \`[VERIFY: primary source required]\`.
+
+## 5. Evidence vs. Inference Separation Protocol
+Structure your synthesis to clearly separate:
+- **Verified Evidence:** Facts, quotas, benchmarks, or rules directly confirmed by cited sources.
+- **Analytical Inference:** Reasoned recommendations or extrapolations derived from the evidence for "${spec.objective}" (explicitly labeled as inference).
+- **Open Assumptions & Conflicts:**
+${formatAssumptionsAndConflictsBlock(spec)}
+
+## 6. Tooling & Integration Trade-Offs Matrix / Comparative Evidence Matrix
+Provide a structured comparison table evaluating the relevant options, methodologies, or sources for "${spec.objective}" against the stated constraints (${spec.budget?.value || "project constraints"}), listing Verified Facts, Limitations/Quotas, and Citation References.
+
+## 7. Deliverable & Acceptance Criteria
+${spec.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`;
 }
 
-function generateGrokNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const role = getDomainRole(domain);
-  const { isZeroBudget, budgetStr, stack } = extractParameters(facts, context);
-
-  return `[FIRST-PRINCIPLES STRATEGIC DIRECTIVE — ZERO CORPORATE FLUFF]
-You are Grok acting as a battle-tested ${role}. Strip away all sanitized corporate boilerplate, polite platitudes, and marketing jargon.
-
-The Objective:
-"${goal}"
-
-The Reality & Ground Truth Constraints:
-${facts.map((f) => `  - ${f}`).join("\n") || "  - Start from scratch; optimize for speed, ruthless leverage, and true market viability."}
-  - Stated Budget: ${budgetStr}
-
-First-Principles Feasibility Analysis:
-1. Deconstruct the Premise & Budget Math:
-   • ${isZeroBudget ? "The budget is literally $0. Strip away every paid SaaS subscription, managed cluster, and expensive API. Use verified zero-cost tiers (Cloudflare Pages, Supabase free tier; [VERIFY: provider quota limits and terms]) that require zero credit card to launch." : "Enforce ruthless capital efficiency; eliminate vanity tools [VERIFY: provider pricing limits]."}
-   • Overengineering Audit: If anyone suggests Kubernetes, Kafka, or microservices for this MVP, reject it immediately. A unified modern stack is 10x faster to build and maintain.
-2. The Brutal Truth on Failure Modes:
-   • What is the #1 reason similar builds fail? (Over-scoped features, unvalidated assumptions, broken state handling, leaking API keys).
-3. Exact Minimalist Tech Stack:
-   • Recommended: ${stack}. No bloatware.
-
-Tactical Punch List:
-- **Day 1 (Foundation)**: Scaffold workspace, configure TypeScript & Tailwind CSS, verify .env.example, deploy live 'Hello World' URL.
-- **Day 7 (Core User Loop)**: Wire up primary feature flow, Zod input validation, loading skeletons, and persistent storage.
-- **Day 30 (Production Polish)**: Full error boundary resilience, mobile viewport polish, automated test suite, and launch announcement.
-
-Zero-BS Definition of Done:
-- Compiles cleanly with zero errors.
-- Real users can complete the core journey without crashing or seeing blank screens.
-- Completely functional within the stated ${budgetStr} constraint.`;
+function buildPerplexityResearchQuestions(
+  spec: CanonicalProjectSpec,
+): string[] {
+  const base = [
+    `What authoritative primary sources, benchmarks, or official documentation govern "${spec.objective}"?`,
+  ];
+  if (spec.taskCategory === "software_development") {
+    base.push(
+      `What are the current official API rate limits, free-tier storage/bandwidth quotas, and commercial terms for ${spec.softwareParams?.integrations || "the target stack"} and ${spec.softwareParams?.hosting || "target hosting"}?`,
+      "What documented breaking changes, security advisories, or edge cases affect this implementation?",
+    );
+  } else if (spec.taskCategory === "research_fact_checking") {
+    base.push(
+      "Where do primary empirical studies or official records agree, and where is the evidence contested or inconclusive?",
+      "What methodological limitations or recency gaps apply to the available evidence?",
+    );
+  } else if (spec.taskCategory === "business_planning") {
+    base.push(
+      `What verified market benchmarks, unit economics (CAC/LTV), and regulatory/platform constraints apply to "${spec.objective}" under a ${spec.budget?.value || "lean"} budget?`,
+      "What documented competitor pricing models and acquisition channels have verified traction in this segment?",
+    );
+  } else if (spec.taskCategory === "study_tutoring") {
+    base.push(
+      `What official syllabus standards, foundational prerequisites, and authoritative reference materials apply to "${spec.objective}"?`,
+      "What are the most common documented misconceptions or exam pitfalls for this topic?",
+    );
+  } else if (spec.taskCategory === "data_analysis") {
+    base.push(
+      `What statistical methods, benchmark datasets, and validation checks are standard for analyzing "${spec.objective}"?`,
+      "What confounding variables or sampling biases commonly distort conclusions in this domain?",
+    );
+  } else {
+    base.push(
+      `What verified factual constraints, best-practice standards, and domain rules apply to "${spec.objective}"?`,
+      "Which assumptions in the project profile require external empirical verification?",
+    );
+  }
+  return base;
 }
 
-function generateCursorNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
-    extractParameters(facts, context);
+function generateGrokNative(spec: CanonicalProjectSpec): string {
+  return `[FIRST-PRINCIPLES STRATEGIC DIRECTIVE — ZERO FLUFF]
+Objective: "${spec.objective}"
+Task Category: ${spec.taskCategoryLabel} (${spec.domainLabel})
 
-  return `// CURSOR AI SYSTEM DIRECTIVES & ARCHITECTURAL RULES
-// Target Project: ${goal}
-// Primary Domain: ${domain || "Full-Stack Software Architecture & Implementation"}
+1. Confirmed Context & Requirements:
+${formatCanonicalContextBlock(spec)}
+
+2. Hard Constraints & Explicit Exclusions:
+${formatConstraintsAndExclusionsBlock(spec)}
+
+3. Evidence & Live Information Boundary:
+- Do NOT assume access to live web or social data unless live search is actively enabled in this session.
+- Distinguish verified facts from analytical estimates; mark any unverified external quota, price, or time-sensitive claim with \`[VERIFY: confirm current figure]\`.
+${spec.safetyPrivacyAccuracy.map((r) => `- ${r}`).join("\n")}
+
+4. First-Principles Assumption & Conflict Audit:
+${formatAssumptionsAndConflictsBlock(spec)}
+- Challenge any hidden bottleneck or overengineered requirement before generating the final deliverable.
+
+5. Tactical Punch List (${spec.taskCategoryLabel}):
+${formatTaskSpecificStructure(spec)}
+
+6. Definition of Done & Acceptance Criteria:
+${spec.acceptanceCriteria.map((c, i) => `- [${i + 1}] ${c}`).join("\n")}`;
+}
+
+function generateCursorNative(spec: CanonicalProjectSpec): string {
+  if (
+    spec.taskCategory !== "software_development" &&
+    !spec.hasCodebaseModification
+  ) {
+    return `// CURSOR AI SYSTEM DIRECTIVES (.cursorrules / Composer Protocol)
+// Project Objective: "${spec.objective}"
+// Task Mode: ${spec.taskCategoryLabel} (Workspace Artifact & Document Authoring)
 
 ## CONTEXT & CONFIRMED REQUIREMENTS
-${facts.length > 0 ? facts.map((f) => `// - ${f}`).join("\n") : "// - High-standard production architecture"}
+${formatCanonicalContextBlock(spec)}
 
-## ARCHITECTURAL BOUNDARIES & TECH STACK
-// - Stack: ${stack}
-// - Integrations: ${integrations}
-// - Target Environment: ${hosting}
-// - Budget Constraint: ${budgetStr}
+## CONSTRAINTS & EXPLICIT EXCLUSIONS
+${formatConstraintsAndExclusionsBlock(spec)}
 
-## TECHNICAL FEASIBILITY & FREE-TIER LIMITS
-// 1. Zero-Cost Enforcement: ${isZeroBudget ? "Rely strictly on verified free tiers (e.g. Supabase 500MB DB cap, Vercel Hobby 100GB/mo; [VERIFY: commercial use restrictions]). Avoid unneeded external services or paid dependencies." : "Respect stated project budget."}
-// 2. Secret Protection: Never prefix private secrets with public frontend environment variables (e.g. VITE_ or NEXT_PUBLIC_). Route external API calls through server-side proxy handlers.
-// 3. Fallbacks: Provide zero-cost fallbacks for resource-intensive features (e.g. email magic links instead of SMS; client-side search instead of paid clusters).
+## UNRESOLVED ASSUMPTIONS & CONFLICTS
+${formatAssumptionsAndConflictsBlock(spec)}
 
-## STRICT DEVELOPMENT CONVENTIONS (.cursorrules)
-1. Code Quality & Strict Typing:
-   - Enforce strict TypeScript types. Never use 'any'. Explicitly declare interface contracts.
-   - Separate business logic, state stores, and UI view layers into dedicated modular files (under 250 lines per module).
-2. Zero Placeholder Mandate:
-   - Never output truncated code, '// TODO: implement later', or simulated mock stubs.
-   - Always output fully implemented, syntactically complete functions and components.
-3. UI State Handling Requirements:
-   - Input Validation: Implement Zod schema parsing for all user input forms with field-level error messages.
-   - Loading States: Provide layout-matching skeleton components and disabled buttons with spinners during async execution.
-   - Empty States: Implement dedicated empty-state cards with helpful guidance and a call-to-action button.
-   - Error Handling: Wrap async handlers in try/catch blocks; show user-facing toast alerts and retry buttons.
-4. Responsive & Accessibility:
-   - Design mobile-first (375px min width); enforce WCAG AA contrast compliance and keyboard navigation.
+## WORKSPACE & FILE SCOPING RULES
+1. Inspect existing workspace files before creating or modifying documents so you preserve existing structure and naming conventions.
+2. Scope edits strictly to the target deliverable (${spec.deliverable?.value || spec.objective}); do not alter unrelated files in the repository.
+3. Do not inject software test suites or code dependencies into non-coding deliverables.
+
+## DELIVERABLE SPECIFICATION (${spec.taskCategoryLabel.toUpperCase()})
+${formatTaskSpecificStructure(spec)}
+
+## VERIFICATION & ACCEPTANCE CRITERIA
+${spec.acceptanceCriteria.map((c, i) => `${i + 1}. [PASS/FAIL] ${c}`).join("\n")}`;
+  }
+
+  const sp = spec.softwareParams;
+  return `// CURSOR AI SYSTEM DIRECTIVES (.cursorrules / Composer Agent Mode)
+// Project Objective: "${spec.objective}"
+// Domain: ${spec.domainLabel}
+
+## CONTEXT & CONFIRMED REQUIREMENTS
+${formatCanonicalContextBlock(spec)}
+
+## TECHNICAL FEASIBILITY, STACK & CONSTRAINTS
+- Budget Boundary: ${spec.budget?.value || "Lean / Free-Tier prioritized"}
+- Target Stack: ${sp?.stack}
+- Integrations, Rate Limits & Persistence Quotas: ${sp?.integrations} [VERIFY: provider rate limits and storage quotas]
+- Hosting Target: ${sp?.hosting}
+${formatConstraintsAndExclusionsBlock(spec)}
+
+## UNRESOLVED ASSUMPTIONS & CONFLICTS
+${formatAssumptionsAndConflictsBlock(spec)}
+
+## REPOSITORY & MINIMAL-CHANGE IMPLEMENTATION RULES
+1. Reconnaissance First: Inspect relevant files, existing types, and package.json before proposing edits.
+2. Minimal Scoped Changes & Phased Delivery: Modify only the files necessary to achieve "${spec.objective}" (separating Phase 1 MVP essentials from Phase 2 enhancements). Preserve existing behavior, public interfaces, and user workflows outside the target scope.
+3. Validation & Interactive States:
+   - Enforce runtime schema validation (Zod) on external inputs, forms, and API payloads.
+   - Implement explicit loading skeletons, empty states, and localized error handling where UI components are touched.
+   - Enforce WCAG AA accessibility and responsive layout integrity when modifying frontend views.
 
 ## ENVIRONMENT VARIABLES & SECRETS (.env.example)
-// PUBLIC VARIABLES (safe in client bundle):
-// VITE_APP_NAME="Prompt Master"
-// SECRET VARIABLES (server-side only, NEVER expose to client):
-// DATABASE_URL="postgresql://..." // [VERIFY: provider quota limits]
-// API_SECRET_KEY="sk_live_..."
+- Isolate all private API keys and database credentials (\`SECRET\`, \`API_SECRET_KEY\`, \`DATABASE_URL\`) inside server-side proxy routes; never expose secrets in client bundles.
+- Document required public and server-only variables in \`.env.example\`.
 
-## IMPLEMENTATION & VERIFICATION PLAN
-1. Phase 1: Scaffold type interfaces, shared utilities, and Zod schemas.
-2. Phase 2: Implement storage/API service layer with robust error resilience.
-3. Phase 3: Construct atomic UI components with loading skeletons and empty states.
-4. Phase 4: Run 'npm run build' and test suites to verify zero compilation errors.`;
+## TESTING, VALIDATION & HONEST REPORTING PROTOCOL
+1. Run relevant typechecks (\`tsc --noEmit\`), build checks (\`npm run build\`), and existing unit/integration tests for modified modules.
+2. Honest Test Reporting: Report the exact commands executed and their real output. Never claim that tests or builds passed unless you actually executed them; if a check cannot be run in the current environment, state that explicitly.
+
+## ACCEPTANCE CRITERIA & DEFINITION OF DONE
+${spec.acceptanceCriteria.map((c, i) => `${i + 1}. [PASS/FAIL] ${c}`).join("\n")}`;
 }
 
-function generateWindsurfNative(
-  goal: string,
-  facts: string[],
-  domain?: string,
-  context?: OptimizationContext,
-): string {
-  const { isZeroBudget, budgetStr, stack, integrations, hosting } =
-    extractParameters(facts, context);
+function generateWindsurfNative(spec: CanonicalProjectSpec): string {
+  const sp = spec.softwareParams;
+  const isCodeTask =
+    spec.taskCategory === "software_development" ||
+    spec.hasCodebaseModification;
 
   return `[WINDSURF CASCADE AGENT EXECUTION PROTOCOL]
-Target Objective: "${goal}"
-Specialty Domain: ${domain || "Production System Engineering & Workflow Orchestration"}
+Target Objective: "${spec.objective}"
+Task Category: ${spec.taskCategoryLabel} (${spec.domainLabel})
 
-Verified Constraints & Budget Guardrails:
-  - Budget Limit: ${budgetStr}
-  - Architecture: ${stack}
-  - Integrations: ${integrations}
-  - Deployment Target: ${hosting}
-  ${facts.map((f) => `- [FACT] ${f}`).join("\n")}
+Confirmed Context & Requirements:
+${formatCanonicalContextBlock(spec)}
+
+Constraints, Budget & Explicit Exclusions:
+${formatConstraintsAndExclusionsBlock(spec)}
+${
+  isCodeTask && sp
+    ? `- Target Stack: ${sp.stack}\n- Integrations: ${sp.integrations}\n- Hosting: ${sp.hosting}`
+    : ""
+}
+
+Unresolved Assumptions & Conflicts:
+${formatAssumptionsAndConflictsBlock(spec)}
 
 --- CASCADE WORKFLOW PHASES ---
 
-PHASE 1: RECONNAISSANCE, FREE-TIER & DEPENDENCY AUDIT
-- Inspect existing workspace files, package manifests, and configuration files before modifying code.
-- Audit free-tier limits: verify that required integrations (${integrations}) fit within free allowances (${isZeroBudget ? "verify provider quotas; [VERIFY: provider quota limits and terms]" : "budget compliant; [VERIFY: provider pricing limits]"}).
-- Validate environment variables: inspect .env.example to ensure private keys are isolated from public client bundles.
-- Formulate a deterministic checklist of files to create, edit, or refactor.
+PHASE 1: RECONNAISSANCE & SCOPED IMPACT AUDIT
+- Inspect existing workspace files, directory conventions, and relevant references before making changes.
+- Identify the minimal set of files or artifacts required to fulfill "${spec.objective}" while preserving existing behavior.
+- ${
+    isCodeTask
+      ? `Audit integrations and environment variables: verify free-tier/budget compliance (${spec.budget?.value || "lean execution"}; [VERIFY: provider quota limits and terms]) and ensure private keys in .env.example remain isolated from client bundles.`
+      : `Verify all constraints, exclusions, and accuracy guardrails (${spec.safetyPrivacyAccuracy[0] || "factual fidelity"}).`
+  }
 
-PHASE 2: ATOMIC STEP-BY-STEP IMPLEMENTATION
-- Apply modifications sequentially. Each file write must be complete and self-contained (zero placeholder '// TODO' comments).
-- Implement mandatory state handling across all interactive features:
-  • Input validation with Zod schemas.
-  • Layout-matched loading skeletons.
-  • Informative empty states with actionable buttons.
-  • Localized error boundaries and toast notifications.
-- Separate essential Phase 1 MVP features from optional Phase 2 enhancements.
+PHASE 2: SCOPED STEP-BY-STEP EXECUTION
+- Apply changes in clean, self-contained steps with zero placeholder comments.
+${formatTaskSpecificStructure(spec)}
 
-PHASE 3: TERMINAL & TEST VERIFICATION
-- Run compilation checks ('npm run build' or equivalent) to confirm zero syntax or type errors.
-- Execute automated tests to verify critical user journeys and API error recovery.
-- Verify responsive layout on mobile (375px+) and desktop viewports.
-- Automatically self-heal any reported compilation or lint errors before concluding.
+PHASE 3: VALIDATION & HONEST COMPLETION REPORTING
+- Validate the completed deliverable against every acceptance criterion below.
+- ${
+    isCodeTask
+      ? "Run typecheck, lint, and test suites (`tsc --noEmit`, `npm run build`, `npm test`) where available."
+      : "Verify structural completeness, tone/register consistency, and adherence to all explicit exclusions."
+  }
+- Honest Completion Report: Summarize exactly what was changed, which validation checks were actually executed vs. unexecuted, and any open assumptions that remain.
 
 DEFINITION OF DONE & OPERATIONAL SAFETY:
-- All features verified functional with validation, loading, empty, and error states.
-- Zero secret leakage in client bundle.
-- Complete compatibility with stated ${budgetStr}.`;
+${spec.acceptanceCriteria.map((c) => `- ${c}`).join("\n")}`;
 }
 
 // ----------------------------------------------------------------------------
 // Helper Utilities
 // ----------------------------------------------------------------------------
 
-function getDomainRole(domain?: string): string {
-  const d = (domain || "").toLowerCase();
-  if (d.includes("business") || d.includes("saas") || d.includes("startup")) {
-    return "Principal Startup Architect & Venture Strategist";
+function getRoleForTask(spec: CanonicalProjectSpec): string {
+  switch (spec.taskCategory) {
+    case "software_development":
+      return "Principal Software Architect & Staff Full-Stack Engineer";
+    case "research_fact_checking":
+      return "Principal Research Methodologist & Evidence Verification Analyst";
+    case "study_tutoring":
+      return "Master Learning Scientist & Personalized Technical Tutor";
+    case "business_planning":
+      return "Principal Venture Strategist & Operations Architect";
+    case "creative_work":
+      return "Executive Creative Director & Master Narrative Architect";
+    case "writing_editing":
+      return "Senior Managing Editor & Strategic Communications Lead";
+    case "data_analysis":
+      return "Principal Data Scientist & Quantitative Analytics Lead";
+    case "general_purpose":
+    default:
+      return "Principal Strategic Consultant & Execution Architect";
   }
-  if (d.includes("website") || d.includes("web") || d.includes("developer")) {
-    return "Lead Full-Stack Solutions Architect";
-  }
-  if (d.includes("creator") || d.includes("youtube") || d.includes("media")) {
-    return "Executive Media Strategist & Audience Growth Director";
-  }
-  if (d.includes("study") || d.includes("learning") || d.includes("exam")) {
-    return "Master Learning Scientist & Curriculum Engineer";
-  }
-  return "Chief Strategy Consultant & Systems Architect";
 }
 
 function extractSection(text: string, regexes: RegExp[]): string | null {

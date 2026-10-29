@@ -9,11 +9,25 @@ import {
   where,
   onSnapshot,
   getDocs,
+  type Firestore,
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "./firebase";
 import type { ExpertId } from "./experts";
 import type { UIMessage } from "ai";
+import {
+  deserializeProjectProfile,
+  type ProjectProfile,
+} from "./project-understanding-engine";
+
+function requireDb(): Firestore {
+  if (!db) {
+    throw new Error(
+      "Firebase Firestore is not initialized or configured. Please supply a valid VITE_FIREBASE_API_KEY.",
+    );
+  }
+  return db;
+}
 
 export type ThemePreference = "dark" | "light";
 
@@ -36,6 +50,7 @@ export interface CloudThreadRecord {
   updatedAt: number;
   createdAt?: number;
   messages: UIMessage[];
+  projectProfile?: ProjectProfile;
 }
 
 export type SupportedModelKey =
@@ -66,7 +81,8 @@ export async function syncUserProfile(
   user: User,
   preferredTheme: ThemePreference = "dark",
 ): Promise<UserProfile> {
-  const userRef = doc(db, "users", user.uid);
+  const database = requireDb();
+  const userRef = doc(database, "users", user.uid);
   const snap = await getDoc(userRef);
 
   if (snap.exists()) {
@@ -100,7 +116,8 @@ export async function updateUserTheme(
   userId: string,
   theme: ThemePreference,
 ): Promise<void> {
-  const userRef = doc(db, "users", userId);
+  const database = requireDb();
+  const userRef = doc(database, "users", userId);
   await updateDoc(userRef, {
     theme,
     updatedAt: Date.now(),
@@ -117,9 +134,16 @@ export async function saveThreadToCloud(
     messages: UIMessage[];
     updatedAt: number;
     isFavorite?: boolean;
+    projectProfile?: ProjectProfile;
   },
 ): Promise<void> {
-  const threadRef = doc(db, "threads", thread.id);
+  const database = requireDb();
+  const threadRef = doc(database, "threads", thread.id);
+  const projectProfile = deserializeProjectProfile(
+    thread.projectProfile,
+    thread.messages,
+    thread.expert,
+  );
   const payload: CloudThreadRecord = {
     id: thread.id,
     userId,
@@ -128,6 +152,7 @@ export async function saveThreadToCloud(
     isFavorite: thread.isFavorite ?? false,
     updatedAt: thread.updatedAt || Date.now(),
     messages: thread.messages,
+    projectProfile,
   };
   await setDoc(threadRef, payload, { merge: true });
 }
@@ -137,7 +162,8 @@ export async function renameThreadInCloud(
   threadId: string,
   newTitle: string,
 ): Promise<void> {
-  const threadRef = doc(db, "threads", threadId);
+  const database = requireDb();
+  const threadRef = doc(database, "threads", threadId);
   await updateDoc(threadRef, {
     title: newTitle.trim() || "Untitled session",
     updatedAt: Date.now(),
@@ -149,7 +175,8 @@ export async function toggleThreadFavoriteInCloud(
   threadId: string,
   isFavorite: boolean,
 ): Promise<void> {
-  const threadRef = doc(db, "threads", threadId);
+  const database = requireDb();
+  const threadRef = doc(database, "threads", threadId);
   await updateDoc(threadRef, {
     isFavorite,
     updatedAt: Date.now(),
@@ -160,7 +187,8 @@ export async function deleteThreadFromCloud(
   userId: string,
   threadId: string,
 ): Promise<void> {
-  const threadRef = doc(db, "threads", threadId);
+  const database = requireDb();
+  const threadRef = doc(database, "threads", threadId);
   await deleteDoc(threadRef);
 }
 
@@ -169,7 +197,10 @@ export function subscribeToUserThreads(
   onUpdate: (threads: CloudThreadRecord[]) => void,
   onError?: (err: Error) => void,
 ): () => void {
-  if (!userId) return () => {};
+  if (!userId || !db) {
+    onUpdate([]);
+    return () => {};
+  }
   const q = query(collection(db, "threads"), where("userId", "==", userId));
 
   return onSnapshot(
@@ -217,7 +248,8 @@ export function saveLocalSavedPrompts(prompts: SavedPromptRecord[]): void {
 export async function savePromptToCloud(
   prompt: Omit<SavedPromptRecord, "createdAt" | "updatedAt">,
 ): Promise<SavedPromptRecord> {
-  const docRef = doc(db, "saved_prompts", prompt.id);
+  const database = requireDb();
+  const docRef = doc(database, "saved_prompts", prompt.id);
   const snap = await getDoc(docRef);
   const now = Date.now();
   const existing = snap.exists() ? (snap.data() as SavedPromptRecord) : null;
@@ -236,7 +268,8 @@ export async function togglePromptFavoriteInCloud(
   promptId: string,
   isFavorite: boolean,
 ): Promise<void> {
-  const docRef = doc(db, "saved_prompts", promptId);
+  const database = requireDb();
+  const docRef = doc(database, "saved_prompts", promptId);
   await updateDoc(docRef, {
     isFavorite,
     updatedAt: Date.now(),
@@ -244,7 +277,8 @@ export async function togglePromptFavoriteInCloud(
 }
 
 export async function deletePromptFromCloud(promptId: string): Promise<void> {
-  const docRef = doc(db, "saved_prompts", promptId);
+  const database = requireDb();
+  const docRef = doc(database, "saved_prompts", promptId);
   await deleteDoc(docRef);
 }
 
@@ -253,7 +287,10 @@ export function subscribeToSavedPrompts(
   onUpdate: (prompts: SavedPromptRecord[]) => void,
   onError?: (err: Error) => void,
 ): () => void {
-  if (!userId) return () => {};
+  if (!userId || !db) {
+    onUpdate([]);
+    return () => {};
+  }
   const q = query(
     collection(db, "saved_prompts"),
     where("userId", "==", userId),
@@ -289,6 +326,9 @@ export async function syncLocalToCloud(
   }[],
   localSavedPrompts: SavedPromptRecord[],
 ): Promise<{ threadsSynced: number; promptsSynced: number; errors: number }> {
+  if (!db) {
+    return { threadsSynced: 0, promptsSynced: 0, errors: 0 };
+  }
   let threadsSynced = 0;
   let promptsSynced = 0;
   let errors = 0;

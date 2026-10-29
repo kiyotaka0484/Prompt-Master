@@ -1,5 +1,11 @@
 import type { UIMessage } from "ai";
-import { detectExpert, type ExpertId } from "./experts";
+import { detectExpert, isVagueIntent, type ExpertId } from "./experts";
+import {
+  buildProjectProfileFromMessages,
+  createEmptyProjectProfile,
+  deserializeProjectProfile,
+  type ProjectProfile,
+} from "./project-understanding-engine";
 
 export interface ThreadRecord {
   id: string;
@@ -8,6 +14,7 @@ export interface ThreadRecord {
   updatedAt: number;
   isFavorite?: boolean;
   messages: UIMessage[];
+  projectProfile?: ProjectProfile;
 }
 
 const KEY = "prompt-master.threads.v1";
@@ -29,20 +36,48 @@ export function loadThreads(): ThreadRecord[] {
   }
 }
 
-function normalizeThreadRecord(thread: ThreadRecord): ThreadRecord {
-  const goalIndex = thread.messages.findIndex(
-    (m) => m.role === "user" && detectExpert(messageText(m)),
+export function normalizeThreadRecord(thread: ThreadRecord): ThreadRecord {
+  const rawMessages = Array.isArray(thread.messages) ? thread.messages : [];
+  let goalIndex = rawMessages.findIndex(
+    (m) => m.role === "user" && Boolean(detectExpert(messageText(m))),
   );
   if (goalIndex === -1) {
-    return { ...thread, expert: null, title: "New session", messages: [] };
+    goalIndex = rawMessages.findIndex((m) => {
+      if (m.role !== "user") return false;
+      const text = messageText(m).trim();
+      return text.length > 0 && !isVagueIntent(text);
+    });
   }
-  const messages = thread.messages.slice(goalIndex);
-  const expert = thread.expert ?? detectExpert(messageText(messages[0]));
+  if (goalIndex === -1) {
+    const expert = thread.expert ?? null;
+    const projectProfile = thread.projectProfile
+      ? deserializeProjectProfile(thread.projectProfile, [], expert)
+      : createEmptyProjectProfile(expert);
+    return {
+      ...thread,
+      expert,
+      title:
+        thread.title && thread.title !== "New session"
+          ? thread.title
+          : "New session",
+      messages: [],
+      projectProfile,
+    };
+  }
+  const messages = rawMessages.slice(goalIndex);
+  const expert =
+    thread.expert ?? detectExpert(messageText(messages[0])) ?? "business";
+  const projectProfile = deserializeProjectProfile(
+    thread.projectProfile,
+    messages,
+    expert,
+  );
   return {
     ...thread,
     expert,
     messages,
     title: deriveTitle(messages),
+    projectProfile,
   };
 }
 
@@ -62,18 +97,31 @@ export function newThreadId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function messageText(m: UIMessage): string {
-  return m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+export function messageText(m: UIMessage | undefined | null): string {
+  if (!m || !Array.isArray(m.parts)) return "";
+  return m.parts
+    .map((p) =>
+      p?.type === "text" && typeof p.text === "string" ? p.text : "",
+    )
+    .join("");
 }
 
-export function messageHasReasoning(m: UIMessage): boolean {
-  return m.parts.some((p) => p.type === "reasoning" && Boolean(p.text));
+export function messageHasReasoning(m: UIMessage | undefined | null): boolean {
+  if (!m || !Array.isArray(m.parts)) return false;
+  return m.parts.some((p) => p?.type === "reasoning" && Boolean(p.text));
 }
 
 export function deriveTitle(messages: UIMessage[]): string {
-  const firstUser = messages.find(
-    (m) => m.role === "user" && detectExpert(messageText(m)),
-  );
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const firstUser =
+    safeMessages.find(
+      (m) => m.role === "user" && Boolean(detectExpert(messageText(m))),
+    ) ??
+    safeMessages.find((m) => {
+      if (m.role !== "user") return false;
+      const text = messageText(m).trim();
+      return text.length > 0 && !isVagueIntent(text);
+    });
   if (!firstUser) return "New session";
   const text = messageText(firstUser).trim();
   if (!text) return "New session";
@@ -86,24 +134,27 @@ export function createFreshSession(options?: {
 }): ThreadRecord {
   const id = newThreadId();
   const goalText = options?.goal?.trim();
+  const expert = options?.expert ?? (goalText ? detectExpert(goalText) : null);
+  const messages: UIMessage[] = goalText
+    ? [
+        {
+          id: newThreadId(),
+          role: "user",
+          parts: [{ type: "text", text: goalText }],
+        },
+      ]
+    : [];
   const thread: ThreadRecord = {
     id,
-    expert: options?.expert ?? (goalText ? detectExpert(goalText) : null),
+    expert,
     title: goalText
       ? goalText.length > 48
         ? goalText.slice(0, 48) + "…"
         : goalText
       : "New session",
     updatedAt: Date.now(),
-    messages: goalText
-      ? [
-          {
-            id: newThreadId(),
-            role: "user",
-            parts: [{ type: "text", text: goalText }],
-          },
-        ]
-      : [],
+    messages,
+    projectProfile: buildProjectProfileFromMessages(messages, expert),
   };
 
   const current = loadThreads();

@@ -12,6 +12,7 @@ import {
   loginWithGithub as fbLoginWithGithub,
   logoutUser as fbLogoutUser,
   onAuthStateChanged,
+  isFirebaseConfigured,
   type User,
 } from "@/lib/firebase";
 import {
@@ -37,6 +38,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   syncLocalData: () => Promise<void>;
   isCloudSynced: boolean;
+  isFirebaseConfigured: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,6 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to Firebase Auth state
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -129,6 +136,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
+    if (!isFirebaseConfigured || !auth) {
+      toast.error(
+        "Cloud authentication is not configured. Set VITE_FIREBASE_API_KEY in your environment to enable sync.",
+      );
+      return;
+    }
     try {
       const loggedUser = await fbLoginWithGoogle();
       toast.success(`Welcome back, ${loggedUser.displayName || "Prompter"}!`);
@@ -149,6 +162,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGithub = async () => {
+    if (!isFirebaseConfigured || !auth) {
+      toast.error(
+        "Cloud authentication is not configured. Set VITE_FIREBASE_API_KEY in your environment to enable sync.",
+      );
+      return;
+    }
     try {
       const loggedUser = await fbLoginWithGithub();
       toast.success(`Welcome back, ${loggedUser.displayName || "Developer"}!`);
@@ -169,6 +188,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    if (!auth) {
+      setUser(null);
+      setProfile(null);
+      return;
+    }
     try {
       await fbLogoutUser();
       toast.success("Signed out successfully");
@@ -218,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         syncLocalData,
         isCloudSynced: !!user,
+        isFirebaseConfigured,
       }}
     >
       {children}

@@ -1,6 +1,55 @@
 import type { UIMessage } from "ai";
 import { EXPERTS, type Expert, type ExpertId, type Slot } from "./experts";
 import { messageText } from "./threads";
+import {
+  buildProjectProfileFromMessages,
+  createEmptyProjectProfile,
+  deserializeProjectProfile,
+  ensureAssumptionsForMissingCoreFields,
+  formatProjectProfileForConsultant,
+  hasExplicitCorrectionIntent,
+  hasProjectPivotIntent,
+  isGenerateNowRequest,
+  isSkipQuestionRequest,
+  isUnfamiliarTaskDomain,
+  isUserDelegation,
+  isUserUncertainty,
+  serializeProjectProfile,
+  updateProjectProfileTurn,
+  validateProjectProfile,
+  type ConfidenceLevel,
+  type ProfileContradiction,
+  type ProfileRequirementItem,
+  type ProjectProfile,
+  type RequirementOrigin,
+  type TurnUpdateInput,
+  type UnresolvedQuestionItem,
+} from "./project-understanding-engine";
+
+export {
+  buildProjectProfileFromMessages,
+  createEmptyProjectProfile,
+  deserializeProjectProfile,
+  ensureAssumptionsForMissingCoreFields,
+  formatProjectProfileForConsultant,
+  hasExplicitCorrectionIntent,
+  hasProjectPivotIntent,
+  isGenerateNowRequest,
+  isSkipQuestionRequest,
+  isUnfamiliarTaskDomain,
+  isUserDelegation,
+  isUserUncertainty,
+  serializeProjectProfile,
+  updateProjectProfileTurn,
+  validateProjectProfile,
+  type ConfidenceLevel,
+  type ProfileContradiction,
+  type ProfileRequirementItem,
+  type ProjectProfile,
+  type RequirementOrigin,
+  type TurnUpdateInput,
+  type UnresolvedQuestionItem,
+};
 
 export type SignalType =
   | "vagueness_detected"
@@ -28,6 +77,51 @@ export interface InferredFact {
     "technical" | "audience" | "business" | "timeline" | "scope" | "format";
 }
 
+export type QuestionCoverageStatus =
+  | "missing"
+  | "confirmed"
+  | "inferred_high"
+  | "inferred_medium"
+  | "assumed_by_user"
+  | "contradictory"
+  | "vague"
+  | "domain_irrelevant";
+
+export interface QuestionValueEstimate {
+  slot: Slot;
+  slotId: string;
+  /** 0..10: How important the missing information is to the outcome */
+  importance: number;
+  /** 0..10: How much the answer could materially change the final prompt */
+  promptImpact: number;
+  /** Whether the answer is already present in the profile (confirmed, high-confidence inferred, or assumed via user deferral) */
+  alreadyPresent: boolean;
+  /** Detailed coverage status in ProjectProfile */
+  coverageStatus: QuestionCoverageStatus;
+  /** 0..10: Penalty when another question or existing fact covers the same information */
+  overlapPenalty: number;
+  /** 0..10: Cost of asking the user another question at this stage */
+  questionCost: number;
+  /** Expected net information value */
+  expectedNetValue: number;
+  /** Plain-English explanation of why this question matters for the user's goal */
+  whyItMatters: string;
+  /** Explanation of why this question was prioritized or suppressed */
+  selectionRationale: string;
+}
+
+export type StoppingPolicyOutcome =
+  "ask_clarification" | "proceed_with_assumptions" | "generate_final_prompt";
+
+export interface StoppingPolicyDecision {
+  outcome: StoppingPolicyOutcome;
+  shouldStop: boolean;
+  reason: string;
+  selectedQuestion: QuestionValueEstimate | null;
+  assumptionsToDisclose: string[];
+  unresolvedConflictsToDisclose: string[];
+}
+
 export interface IntelligenceAnalysis {
   goal: string;
   expertId: ExpertId | null;
@@ -40,6 +134,10 @@ export interface IntelligenceAnalysis {
   readinessScore: number; // 0 - 100
   isReadyForMasterPrompt: boolean;
   questionNumber: number;
+  projectProfile: ProjectProfile;
+  isUnfamiliarDomain?: boolean;
+  candidateQuestions?: QuestionValueEstimate[];
+  stoppingPolicy?: StoppingPolicyDecision;
 }
 
 /**
@@ -435,20 +533,21 @@ export function inferInformation(
         "Detected clear zero-cost constraint requiring verified free-tier services",
       category: "business",
     });
-  } else if (
-    /\$?[0-9]+k?\s*(budget|dollars|usd)/.test(clean) ||
-    clean.includes("10k") ||
-    clean.includes("500") ||
-    clean.includes("1000")
-  ) {
-    const match = clean.match(/(\$?[0-9]+k?)\s*(budget|dollars|usd)?/);
-    if (match) {
+  } else {
+    const budgetMatch =
+      clean.match(
+        /\b(?:budget|capital|funding|spend|spending|invest|investment)\s*(?:of|is|around|under|up to|:)?\s*(\$?[0-9][0-9,]*(?:\.[0-9]+)?k?\s*(?:usd|dollars|eur|gbp|bdt|inr)?)\b/i,
+      ) ??
+      clean.match(
+        /(\$[0-9][0-9,]*(?:\.[0-9]+)?k?|\b[0-9][0-9,]*(?:\.[0-9]+)?k?\s*(?:dollars|usd|eur|gbp|bdt|inr))\s*(?:budget|capital|funding|to spend|to invest|max|limit)/i,
+      );
+    if (budgetMatch && budgetMatch[1]) {
       add({
         id: "budget_constraint",
         label: "Starting Budget",
-        value: `Approx. ${match[1].toUpperCase()}`,
+        value: `Approx. ${budgetMatch[1].trim().toUpperCase()}`,
         confidence: "medium",
-        rationale: "Extracted numeric budget figure from context",
+        rationale: "Extracted explicit numeric budget figure from context",
         category: "business",
       });
     }
@@ -668,6 +767,9 @@ export function detectContradictions(allUserAnswers: string[]): {
   contradiction?: IntelligenceSignal;
 } {
   const combined = allUserAnswers.join(" ").toLowerCase();
+  const latest = (
+    allUserAnswers[allUserAnswers.length - 1] ?? ""
+  ).toLowerCase();
 
   // Contradiction 1: $0 budget vs expensive paid growth
   const claimsZeroBudget =
@@ -684,8 +786,16 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("influencer sponsorship") ||
     combined.includes("hire developers") ||
     combined.includes("hire a team");
+  const resolvedPaidGrowth =
+    latest.includes("organic") ||
+    latest.includes("no paid ads") ||
+    latest.includes("free channels") ||
+    latest.includes("community") ||
+    latest.includes("content marketing") ||
+    latest.includes("cold outreach") ||
+    /\$[1-9][0-9]+/.test(latest);
 
-  if (claimsZeroBudget && claimsPaidGrowth) {
+  if (claimsZeroBudget && claimsPaidGrowth && !resolvedPaidGrowth) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -714,8 +824,14 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("marketplace like amazon") ||
     combined.includes("custom neural network") ||
     combined.includes("streaming platform");
+  const resolvedMassiveScope =
+    latest.includes("mvp") ||
+    latest.includes("phase 1") ||
+    latest.includes("narrow") ||
+    latest.includes("single feature") ||
+    latest.includes("prototype");
 
-  if (claimsTinyTime && claimsMassiveScope) {
+  if (claimsTinyTime && claimsMassiveScope && !resolvedMassiveScope) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -741,8 +857,15 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("custom blockchain") ||
     combined.includes("write an engine") ||
     combined.includes("from scratch in assembly");
+  const resolvedLowLevel =
+    latest.includes("no-code") ||
+    latest.includes("low-code") ||
+    latest.includes("react") ||
+    latest.includes("next.js") ||
+    latest.includes("template") ||
+    latest.includes("high-level");
 
-  if (claimsNonTech && claimsLowLevel) {
+  if (claimsNonTech && claimsLowLevel && !resolvedLowLevel) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -766,8 +889,15 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("$2000") ||
     combined.includes("$500/month") ||
     combined.includes("high ticket");
+  const resolvedHighTicket =
+    latest.includes("freemium") ||
+    latest.includes("free tier") ||
+    latest.includes("b2b") ||
+    latest.includes("enterprise") ||
+    latest.includes("low cost") ||
+    latest.includes("affordable");
 
-  if (claimsBrokeAudience && claimsHighTicket) {
+  if (claimsBrokeAudience && claimsHighTicket && !resolvedHighTicket) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -790,8 +920,14 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("dentist invoice") ||
     combined.includes("cpa tax calculator") ||
     combined.includes("real estate crm");
+  const resolvedEveryone =
+    !latest.includes("for everyone") &&
+    !latest.includes("every single person") &&
+    (latest.includes("specifically") ||
+      latest.includes("only for") ||
+      latest.includes("focused on"));
 
-  if (claimsEveryone && claimsNicheProduct) {
+  if (claimsEveryone && claimsNicheProduct && !resolvedEveryone) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -821,8 +957,19 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("custom model training") ||
     combined.includes("heavy video transcoding") ||
     combined.includes("high volume transactional emails");
+  const resolvedExceedingFeatures =
+    latest.includes("email") ||
+    latest.includes("webpush") ||
+    latest.includes("resend") ||
+    latest.includes("free alternative") ||
+    latest.includes("without sms") ||
+    latest.includes("no sms");
 
-  if (claimsFreeOrZero && claimsExceedingFeatures) {
+  if (
+    claimsFreeOrZero &&
+    claimsExceedingFeatures &&
+    !resolvedExceedingFeatures
+  ) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -853,8 +1000,15 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("distributed consensus") ||
     combined.includes("cassandra") ||
     combined.includes("graphql federation mesh");
+  const resolvedOverengineered =
+    latest.includes("monolith") ||
+    latest.includes("supabase") ||
+    latest.includes("sqlite") ||
+    latest.includes("serverless") ||
+    latest.includes("keep it simple") ||
+    latest.includes("no kubernetes");
 
-  if (isSimpleOrMvp && claimsOverengineered) {
+  if (isSimpleOrMvp && claimsOverengineered && !resolvedOverengineered) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -876,8 +1030,15 @@ export function detectContradictions(allUserAnswers: string[]): {
     combined.includes("express server") ||
     combined.includes("python backend") ||
     combined.includes("docker container");
+  const resolvedStaticOnly =
+    latest.includes("vercel") ||
+    latest.includes("cloudflare") ||
+    latest.includes("netlify") ||
+    latest.includes("render") ||
+    latest.includes("localstorage") ||
+    latest.includes("indexeddb");
 
-  if (claimsStaticOnly && claimsServerRuntime) {
+  if (claimsStaticOnly && claimsServerRuntime && !resolvedStaticOnly) {
     return {
       contradiction: {
         type: "contradiction_detected",
@@ -1161,18 +1322,691 @@ export function detectKnowledgeGaps(
 }
 
 /**
+ * Builds task-adaptive candidate slots when a user's project falls outside the 4 standard
+ * consultant categories (business, website, study, creator).
+ */
+export function buildTaskAdaptiveSlots(profile: ProjectProfile): Slot[] {
+  const goalPreview = profile.primaryGoal?.value || "your project";
+  return [
+    {
+      id: "audience",
+      label: "Target Audience & Operating Context",
+      priority: "critical",
+      why: "Knowing who will use or experience this and their environment ensures the tone, depth, and assumptions fit your real-world context.",
+      question: `To make sure the prompt is tailored to ${goalPreview.slice(0, 70)}, who is the intended audience or participant group, and what is their experience level or setting?`,
+      examples: [
+        "Experienced practitioners vs. first-time participants",
+        "Solo execution vs. team/group environment",
+        "Specific environment, tools, or operational setting",
+      ],
+    },
+    {
+      id: "deliverable_format",
+      label: "Deliverable Structure & Output Format",
+      priority: "critical",
+      why: "Defining the exact sections and format upfront ensures the AI generates an immediately usable deliverable rather than a generic summary.",
+      question:
+        "What exact structure, sections, or format should the final output follow?",
+      examples: [
+        "Step-by-step protocol / runbook with verification checklists",
+        "Modular sections with concrete templates, scripts, or tables",
+        "Comprehensive blueprint with examples and edge-case handling",
+      ],
+    },
+    {
+      id: "constraints_scope",
+      label: "Core Rules, Boundaries & Must-Have Elements",
+      priority: "high",
+      why: "Locking in hard constraints, must-have elements, and exclusions prevents the AI from drifting into irrelevant or impractical directions.",
+      question:
+        "What essential rules, constraints, or must-have elements need to be included (and is there anything that should be strictly excluded)?",
+      examples: [
+        "Time, length, or resource boundaries",
+        "Mandatory mechanics, safety/compliance rules, or style guidelines",
+        "Specific topics, clichés, or approaches to avoid",
+      ],
+    },
+    {
+      id: "success_criteria",
+      label: "Success Criteria & Quality Bar",
+      priority: "normal",
+      why: "Clear success criteria give the AI an objective checklist to self-verify before completing the output.",
+      question:
+        "What specific outcome or quality bar will make this final deliverable a 10/10 for your needs?",
+      examples: [
+        "Ready to execute immediately with zero placeholder text",
+        "Includes measurable checkpoints and fallback contingencies",
+        "Covers both standard execution and tricky edge cases",
+      ],
+    },
+  ];
+}
+
+const COMMERCIAL_OR_DOMAIN_SPECIFIC_SLOTS = new Set([
+  "country",
+  "model",
+  "offer",
+  "stage",
+  "risk",
+  "budget",
+  "hosting",
+  "tech_stack",
+  "skills",
+  "integrations",
+  "cadence",
+  "cta",
+  "platform",
+  "weakness",
+]);
+
+function countRichProfileFacets(
+  profile: ProjectProfile,
+  inferredFacts: InferredFact[],
+): number {
+  let count = 0;
+  if (
+    profile.primaryGoal &&
+    profile.primaryGoal.value.split(/\s+/).filter(Boolean).length >= 4
+  ) {
+    count += 1;
+  }
+  if (
+    profile.intendedAudience ||
+    inferredFacts.some((f) => f.category === "audience")
+  ) {
+    count += 1;
+  }
+  if (
+    profile.desiredDeliverable ||
+    inferredFacts.some((f) => f.category === "scope" || f.category === "format")
+  ) {
+    count += 1;
+  }
+  if (profile.budget || inferredFacts.some((f) => f.category === "business")) {
+    count += 1;
+  }
+  if (profile.timeline || profile.resources.some((r) => r.slotId === "time")) {
+    count += 1;
+  }
+  if (profile.functionalRequirements.length > 0) {
+    count += Math.min(2, profile.functionalRequirements.length);
+  }
+  if (profile.userPreferences.length > 0) {
+    count += Math.min(2, profile.userPreferences.length);
+  }
+  if (profile.nonFunctionalRequirements.length > 0) {
+    count += 1;
+  }
+  if (profile.explicitExclusions.length > 0) {
+    count += 1;
+  }
+  if (profile.targetPlatforms.length > 0) {
+    count += 1;
+  }
+  const extCount = Object.keys(profile.domainExtensions).filter(
+    (k) => k !== "interview_control",
+  ).length;
+  if (extCount > 0) {
+    count += Math.min(2, extCount);
+  }
+  return count;
+}
+
+/**
+ * Evaluates every candidate follow-up question by information value:
+ * - Importance of missing information to the outcome
+ * - Impact of the answer on the final prompt
+ * - Whether the answer is already present in the ProjectProfile
+ * - Whether another question or captured requirement covers the same ground (overlap)
+ * - Cost of asking the user another question
+ */
+export function evaluateCandidateQuestions(
+  expert: Expert | null,
+  profile: ProjectProfile,
+  inferredFacts: InferredFact[],
+  confirmedFacts: Array<{ label: string; value: string; slotId?: string }>,
+  lastUserText = "",
+): QuestionValueEstimate[] {
+  const isUnfamiliar = isUnfamiliarTaskDomain(profile);
+  const baseSlots: Slot[] = [];
+  const seenIds = new Set<string>();
+
+  // If unfamiliar task domain, prioritize universal task-adaptive slots first
+  if (isUnfamiliar) {
+    for (const s of buildTaskAdaptiveSlots(profile)) {
+      const norm = normalizeSlotId(s.id);
+      seenIds.add(norm);
+      baseSlots.push(s);
+    }
+  }
+
+  if (expert?.slots) {
+    for (const s of expert.slots) {
+      const norm = normalizeSlotId(s.id);
+      if (!seenIds.has(norm)) {
+        seenIds.add(norm);
+        baseSlots.push(s);
+      }
+    }
+  }
+
+  // Ensure any active unresolved contradiction has a matching slot candidate
+  for (const c of profile.contradictions) {
+    if (c.status !== "unresolved") continue;
+    const normField = normalizeSlotId(c.field);
+    if (!seenIds.has(normField)) {
+      seenIds.add(normField);
+      baseSlots.unshift({
+        id: normField,
+        label: c.title,
+        priority: "critical",
+        why: c.description,
+        question: `${c.description} ${c.recommendation}`,
+        examples: [c.earlierEvidence.value, c.conflictingEvidence.value],
+      });
+    }
+  }
+
+  const confirmedSlotIds = new Set<string>();
+  for (const f of confirmedFacts) {
+    if (f.slotId) confirmedSlotIds.add(normalizeSlotId(f.slotId));
+  }
+  for (const f of profile.confirmedFacts) {
+    if (f.slotId) confirmedSlotIds.add(normalizeSlotId(f.slotId));
+    confirmedSlotIds.add(normalizeSlotId(f.id));
+  }
+
+  const hasExplicitSlotCoverage = (normSlot: string): boolean => {
+    if (confirmedSlotIds.has(normSlot)) return true;
+    if (
+      (normSlot === "audience" || normSlot === "target_audience") &&
+      profile.intendedAudience?.origin === "explicit"
+    ) {
+      return true;
+    }
+    if (
+      (normSlot === "purpose" ||
+        normSlot === "type" ||
+        normSlot === "format" ||
+        normSlot === "deliverable_format" ||
+        normSlot === "output") &&
+      profile.desiredDeliverable?.origin === "explicit"
+    ) {
+      return true;
+    }
+    if (normSlot === "budget" && profile.budget?.origin === "explicit") {
+      return true;
+    }
+    if (
+      (normSlot === "timeline" || normSlot === "deadline") &&
+      profile.timeline?.origin === "explicit"
+    ) {
+      return true;
+    }
+    if (
+      profile.functionalRequirements.some(
+        (fr) =>
+          fr.origin === "explicit" && normalizeSlotId(fr.slotId) === normSlot,
+      )
+    ) {
+      return true;
+    }
+    if (
+      normSlot === "constraints_scope" &&
+      (profile.functionalRequirements.length > 0 ||
+        profile.constraints.length > 0 ||
+        profile.explicitExclusions.length > 0)
+    ) {
+      return true;
+    }
+    if (
+      profile.userPreferences.some(
+        (p) =>
+          p.origin === "explicit" && normalizeSlotId(p.slotId) === normSlot,
+      )
+    ) {
+      return true;
+    }
+    if (
+      profile.resources.some(
+        (r) =>
+          r.origin === "explicit" && normalizeSlotId(r.slotId) === normSlot,
+      )
+    ) {
+      return true;
+    }
+    if (
+      (normSlot === "success_criteria" || normSlot === "acceptance_criteria") &&
+      profile.successCriteria.length > 0
+    ) {
+      return true;
+    }
+    const ext = profile.domainExtensions[normSlot];
+    if (ext && ext.origin === "explicit") {
+      return true;
+    }
+    return false;
+  };
+
+  const hasUserDeferredAssumption = (normSlot: string): boolean => {
+    return profile.inferredAssumptions.some(
+      (a) =>
+        a.status === "active" &&
+        a.origin === "assumed" &&
+        (normalizeSlotId(a.slotId) === normSlot ||
+          normalizeSlotId(a.id) === `assumed_slot_${normSlot}`) &&
+        a.evidence.rationale &&
+        (a.evidence.rationale.includes("delegated") ||
+          a.evidence.rationale.includes("skipped") ||
+          a.evidence.rationale.includes("uncertainty")),
+    );
+  };
+
+  const getContradictionForSlot = (
+    normSlot: string,
+  ): ProfileContradiction | undefined => {
+    return profile.contradictions.find((c) => {
+      if (c.status !== "unresolved") return false;
+      const cField = normalizeSlotId(c.field);
+      if (cField === normSlot) return true;
+      if (
+        c.id === "contradiction_budget_vs_paid_growth" &&
+        (normSlot === "budget" || normSlot === "model")
+      ) {
+        return true;
+      }
+      if (
+        c.id === "contradiction_free_tier_vs_paid_infra" &&
+        (normSlot === "integrations" || normSlot === "budget")
+      ) {
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const richFacetCount = countRichProfileFacets(profile, inferredFacts);
+  const userDeferralCount = profile.inferredAssumptions.filter(
+    (a) =>
+      a.status === "active" &&
+      a.origin === "assumed" &&
+      a.id.startsWith("assumed_slot_"),
+  ).length;
+  const forceGenerateNow =
+    Boolean(profile.domainExtensions["interview_control"]) ||
+    isGenerateNowRequest(lastUserText);
+
+  const hasCoreFourPillars =
+    Boolean(profile.primaryGoal) &&
+    Boolean(
+      profile.intendedAudience ||
+      inferredFacts.some((f) => f.category === "audience"),
+    ) &&
+    Boolean(
+      profile.desiredDeliverable ||
+      profile.functionalRequirements.length > 0 ||
+      inferredFacts.some((f) => f.category === "scope"),
+    ) &&
+    Boolean(
+      profile.budget ||
+      profile.userPreferences.length > 0 ||
+      profile.timeline ||
+      Object.keys(profile.domainExtensions).length > 0,
+    );
+
+  const estimates: QuestionValueEstimate[] = [];
+
+  for (const slot of baseSlots) {
+    const normSlot = normalizeSlotId(slot.id);
+    const activeContradiction = getContradictionForSlot(normSlot);
+    const isVagueSlot = profile.unresolvedQuestions.some(
+      (q) =>
+        normalizeSlotId(q.slotId) === normSlot && q.reason === "vague_answer",
+    );
+
+    let coverageStatus: QuestionCoverageStatus = "missing";
+    let alreadyPresent = false;
+
+    if (activeContradiction) {
+      coverageStatus = "contradictory";
+      alreadyPresent = false;
+    } else if (
+      isUnfamiliar &&
+      COMMERCIAL_OR_DOMAIN_SPECIFIC_SLOTS.has(normSlot)
+    ) {
+      coverageStatus = "domain_irrelevant";
+      alreadyPresent = false;
+    } else if (hasUserDeferredAssumption(normSlot)) {
+      coverageStatus = "assumed_by_user";
+      alreadyPresent = true;
+    } else if (hasExplicitSlotCoverage(normSlot)) {
+      coverageStatus = "confirmed";
+      alreadyPresent = true;
+    } else if (isVagueSlot) {
+      coverageStatus = "vague";
+      alreadyPresent = false;
+    } else {
+      const matchingInf = inferredFacts.find((inf) =>
+        factMatchesSlot(inf, normSlot),
+      );
+      const matchingProfileInf = profile.inferredAssumptions.find(
+        (a) =>
+          a.status === "active" &&
+          a.origin === "inferred" &&
+          (normalizeSlotId(a.slotId) === normSlot ||
+            factMatchesSlot(
+              {
+                id: a.id,
+                label: a.label,
+                value: a.value,
+                confidence: a.confidence === "high" ? "high" : "medium",
+                rationale: a.evidence.rationale || "",
+                category: "technical",
+              },
+              normSlot,
+            )),
+      );
+      if (
+        matchingInf?.confidence === "high" ||
+        matchingProfileInf?.confidence === "high"
+      ) {
+        coverageStatus = "inferred_high";
+        alreadyPresent = true;
+      } else if (matchingInf || matchingProfileInf) {
+        coverageStatus = "inferred_medium";
+        alreadyPresent = false;
+      }
+    }
+
+    // 1. Estimate importance (0..10)
+    let importance = 5.5;
+    if (coverageStatus === "contradictory") {
+      importance = 10.0;
+    } else if (coverageStatus === "domain_irrelevant") {
+      importance = 0.5;
+    } else if (
+      normSlot === "purpose" ||
+      normSlot === "goal" ||
+      normSlot === "deliverable_format" ||
+      normSlot === "audience" ||
+      normSlot === "target_audience" ||
+      normSlot === "features" ||
+      normSlot === "constraints_scope"
+    ) {
+      importance = 9.2;
+    } else if (
+      normSlot === "budget" ||
+      normSlot === "tech_stack" ||
+      normSlot === "model" ||
+      normSlot === "offer" ||
+      normSlot === "level" ||
+      normSlot === "platform" ||
+      normSlot === "niche" ||
+      normSlot === "format" ||
+      normSlot === "output"
+    ) {
+      importance = 7.8;
+    } else if (
+      normSlot === "design" ||
+      normSlot === "risk" ||
+      normSlot === "stage" ||
+      normSlot === "cadence" ||
+      normSlot === "cta" ||
+      normSlot === "weakness" ||
+      normSlot === "resources"
+    ) {
+      importance = 3.0;
+    } else if (slot.priority === "critical") {
+      importance = 8.8;
+    } else if (slot.priority === "high") {
+      importance = 7.2;
+    }
+
+    // 2. Estimate prompt impact (0..10)
+    let promptImpact = 5.2;
+    if (coverageStatus === "contradictory") {
+      promptImpact = 9.8;
+    } else if (coverageStatus === "domain_irrelevant") {
+      promptImpact = 0.5;
+    } else if (coverageStatus === "vague") {
+      promptImpact = 8.8;
+    } else if (importance >= 9.0) {
+      promptImpact = 9.0;
+    } else if (importance >= 7.5) {
+      promptImpact = 7.5;
+    } else if (importance <= 3.5) {
+      promptImpact = 2.8;
+    }
+
+    // 3. Estimate overlap penalty (0..10)
+    let overlapPenalty = 0;
+    if (normSlot === "skills" || normSlot === "experience") {
+      if (hasExplicitSlotCoverage("tech_stack")) {
+        overlapPenalty = 8.0;
+      } else {
+        overlapPenalty = 3.2;
+      }
+    } else if (
+      normSlot === "purpose" &&
+      (profile.desiredDeliverable ||
+        inferredFacts.some((f) => f.id === "site_type"))
+    ) {
+      overlapPenalty = 7.5;
+    } else if (
+      normSlot === "time" &&
+      (hasExplicitSlotCoverage("timeline") ||
+        hasExplicitSlotCoverage("deadline"))
+    ) {
+      overlapPenalty = 4.5;
+    } else if (
+      (normSlot === "timeline" || normSlot === "deadline") &&
+      hasExplicitSlotCoverage("time")
+    ) {
+      overlapPenalty = 4.5;
+    } else if (
+      normSlot === "offer" &&
+      (hasExplicitSlotCoverage("model") || Boolean(profile.desiredDeliverable))
+    ) {
+      overlapPenalty = 5.0;
+    }
+
+    // 4. Estimate question cost (0..10)
+    let questionCost =
+      2.0 + confirmedFacts.length * 1.1 + userDeferralCount * 1.4;
+    if (richFacetCount >= 6 && hasCoreFourPillars) {
+      questionCost += 6.2;
+    } else if (richFacetCount >= 5 && hasCoreFourPillars) {
+      questionCost += 4.5;
+    } else if (richFacetCount >= 4) {
+      questionCost += 1.6;
+    }
+    if (forceGenerateNow) {
+      questionCost = 10.0;
+    } else if (coverageStatus === "contradictory") {
+      questionCost = 1.0;
+    }
+    questionCost = Math.min(10.0, Number(questionCost.toFixed(2)));
+
+    // 5. Compute expected net information value
+    let expectedNetValue = -10.0;
+    if (!alreadyPresent && coverageStatus !== "domain_irrelevant") {
+      const rawValue = importance * 0.55 + promptImpact * 0.45;
+      const mediumDiscount = coverageStatus === "inferred_medium" ? 3.0 : 0;
+      expectedNetValue = Number(
+        (rawValue - mediumDiscount - overlapPenalty - questionCost).toFixed(2),
+      );
+    }
+
+    const whyItMatters = activeContradiction
+      ? `${activeContradiction.description} Resolving this tension ensures your final prompt doesn't recommend tools or channels that violate your constraints.`
+      : slot.why;
+
+    let selectionRationale = "High-impact missing requirement";
+    if (coverageStatus === "contradictory") {
+      selectionRationale = `Resolves active conflict: ${activeContradiction?.title}`;
+    } else if (coverageStatus === "vague") {
+      selectionRationale = "Clarifies earlier broad or ambiguous answer";
+    } else if (coverageStatus === "confirmed") {
+      selectionRationale = "Suppressed: already explicitly provided in profile";
+    } else if (coverageStatus === "inferred_high") {
+      selectionRationale = "Suppressed: already inferred with high confidence";
+    } else if (coverageStatus === "assumed_by_user") {
+      selectionRationale =
+        "Suppressed: user delegated or skipped this choice (covered by labeled assumption)";
+    } else if (coverageStatus === "domain_irrelevant") {
+      selectionRationale =
+        "Suppressed: consultant slot is not relevant to this task domain";
+    } else if (expectedNetValue <= 1.5) {
+      selectionRationale =
+        "Low marginal value compared to the cost of asking another question";
+    }
+
+    estimates.push({
+      slot: activeContradiction
+        ? {
+            ...slot,
+            question: `${activeContradiction.description} ${activeContradiction.recommendation}`,
+            why: whyItMatters,
+          }
+        : slot,
+      slotId: normSlot,
+      importance,
+      promptImpact,
+      alreadyPresent,
+      coverageStatus,
+      overlapPenalty,
+      questionCost,
+      expectedNetValue,
+      whyItMatters,
+      selectionRationale,
+    });
+  }
+
+  return estimates.sort((a, b) => b.expectedNetValue - a.expectedNetValue);
+}
+
+/**
+ * Evaluates the interview stopping policy based on candidate question value,
+ * active contradictions, explicit assumptions, and user intent.
+ */
+export function evaluateStoppingPolicy(
+  profile: ProjectProfile,
+  candidateQuestions: QuestionValueEstimate[],
+  lastUserText = "",
+): StoppingPolicyDecision {
+  const unresolvedConflicts = profile.contradictions.filter(
+    (c) => c.status === "unresolved",
+  );
+  const unresolvedConflictsToDisclose = unresolvedConflicts.map(
+    (c) => `${c.title}: ${c.description} (Recommendation: ${c.recommendation})`,
+  );
+
+  const collectAssumptions = (prof: ProjectProfile): string[] =>
+    prof.inferredAssumptions
+      .filter((a) => a.status === "active" && a.origin === "assumed")
+      .map((a) => `${a.label.replace(/\s*\(Assumed\)$/i, "")}: ${a.value}`);
+
+  const forceGenerateNow =
+    Boolean(profile.domainExtensions["interview_control"]) ||
+    isGenerateNowRequest(lastUserText);
+
+  // 1. User explicitly asked to skip the interview or generate the prompt now
+  if (forceGenerateNow) {
+    const hydratedProfile = ensureAssumptionsForMissingCoreFields(profile);
+    const assumptionsToDisclose = collectAssumptions(hydratedProfile);
+    return {
+      outcome:
+        assumptionsToDisclose.length > 0 ||
+        unresolvedConflictsToDisclose.length > 0
+          ? "proceed_with_assumptions"
+          : "generate_final_prompt",
+      shouldStop: true,
+      reason:
+        unresolvedConflictsToDisclose.length > 0
+          ? "User requested immediate prompt generation; proceeding with explicit conflict disclosure and assumptions."
+          : "User requested to skip remaining questions; proceeding with labeled assumptions.",
+      selectedQuestion: null,
+      assumptionsToDisclose,
+      unresolvedConflictsToDisclose,
+    };
+  }
+
+  // 2. Unresolved contradiction must be resolved before final generation unless user skipped
+  const contradictionCandidate = candidateQuestions.find(
+    (q) => q.coverageStatus === "contradictory",
+  );
+  if (contradictionCandidate) {
+    return {
+      outcome: "ask_clarification",
+      shouldStop: false,
+      reason: `Active contradiction requires clarification: ${contradictionCandidate.selectionRationale}`,
+      selectedQuestion: contradictionCandidate,
+      assumptionsToDisclose: collectAssumptions(profile),
+      unresolvedConflictsToDisclose,
+    };
+  }
+
+  // 3. Compare top candidate's expected net value against stopping threshold
+  const bestCandidate = candidateQuestions[0] ?? null;
+  if (!bestCandidate || bestCandidate.expectedNetValue <= 1.5) {
+    const userDeferredAssumptions = profile.inferredAssumptions.filter(
+      (a) =>
+        a.status === "active" &&
+        a.origin === "assumed" &&
+        a.id.startsWith("assumed_slot_"),
+    );
+    const assumptionsToDisclose = collectAssumptions(profile);
+    const hasMaterialAssumptions =
+      userDeferredAssumptions.length > 0 ||
+      (!profile.budget &&
+        !isUnfamiliarTaskDomain(profile) &&
+        assumptionsToDisclose.length > 0 &&
+        profile.confirmedFacts.length < 4);
+
+    return {
+      outcome: hasMaterialAssumptions
+        ? "proceed_with_assumptions"
+        : "generate_final_prompt",
+      shouldStop: true,
+      reason: hasMaterialAssumptions
+        ? "Expected value of further questions is low; proceeding with explicitly identified assumptions."
+        : "Project profile has sufficient high-value context; ready to generate final prompts.",
+      selectedQuestion: null,
+      assumptionsToDisclose,
+      unresolvedConflictsToDisclose,
+    };
+  }
+
+  return {
+    outcome: "ask_clarification",
+    shouldStop: false,
+    reason: bestCandidate.selectionRationale,
+    selectedQuestion: bestCandidate,
+    assumptionsToDisclose: collectAssumptions(profile),
+    unresolvedConflictsToDisclose,
+  };
+}
+
+/**
  * Master analysis function run by the Interview Intelligence Engine on every turn
  */
 export function analyzeInterview(
   messages: UIMessage[],
   expertId: ExpertId | null,
+  existingProfile?: ProjectProfile | null,
 ): IntelligenceAnalysis {
   const userMessages = messages.filter((m) => m.role === "user");
   const assistantMessages = messages.filter((m) => m.role === "assistant");
   const userTexts = userMessages.map((m) => messageText(m).trim());
   const goal = userTexts[0] ?? "";
+  const lastUserText = userTexts[userTexts.length - 1] ?? "";
 
   const expert = expertId ? EXPERTS[expertId] : null;
+  let projectProfile = buildProjectProfileFromMessages(
+    messages,
+    expertId,
+    existingProfile,
+  );
   const inferredFacts = inferInformation(goal, userTexts.slice(1), expertId);
 
   // Derive which questions were already asked and answered
@@ -1191,23 +2025,89 @@ export function analyzeInterview(
 
     if (tagMatch && nextUser) {
       const userAns = messageText(nextUser).trim();
-      // Clarification requests (e.g. "Why am I being asked this?") do not answer the slot
-      if (isClarificationOrMetaRequest(userAns)) {
+      // Clarification requests, vague non-answers, and user delegations/skips do not count as confirmed facts
+      if (
+        !userAns ||
+        isClarificationOrMetaRequest(userAns) ||
+        detectVagueness(userAns).isVague ||
+        isUserDelegation(userAns) ||
+        isSkipQuestionRequest(userAns) ||
+        isGenerateNowRequest(userAns)
+      ) {
         continue;
       }
       const slotId = normalizeSlotId(tagMatch[1]);
       const slotDef = expert?.slots.find(
         (s) => normalizeSlotId(s.id) === slotId,
       );
-      confirmedFacts.push({
+      const profileSlotFact = projectProfile.confirmedFacts.find(
+        (cf) => normalizeSlotId(cf.slotId || cf.id) === slotId,
+      );
+      const existingIdx = confirmedFacts.findIndex(
+        (f) => normalizeSlotId(f.slotId) === slotId,
+      );
+      const factEntry = {
         slotId,
-        label: slotDef?.label ?? slotId,
-        value: userAns,
-      });
+        label: slotDef?.label ?? profileSlotFact?.label ?? slotId,
+        value: profileSlotFact?.value ?? userAns,
+      };
+      if (existingIdx >= 0) {
+        confirmedFacts[existingIdx] = factEntry;
+      } else {
+        confirmedFacts.push(factEntry);
+      }
     }
   }
 
-  // Identify unnecessary topics that should NEVER be asked because they are already inferred
+  // Sync any inline corrections from projectProfile into confirmedFacts for slots already present
+  for (const cf of confirmedFacts) {
+    if (!cf.slotId) continue;
+    const normSlot = normalizeSlotId(cf.slotId);
+    if (
+      (normSlot === "audience" || normSlot === "target_audience") &&
+      projectProfile.intendedAudience?.origin === "explicit"
+    ) {
+      cf.value = projectProfile.intendedAudience.value;
+    } else if (
+      normSlot === "budget" &&
+      projectProfile.budget?.origin === "explicit"
+    ) {
+      cf.value = projectProfile.budget.value;
+    } else {
+      const matchingProfFact = projectProfile.confirmedFacts.find(
+        (pf) => normalizeSlotId(pf.slotId || pf.id) === normSlot,
+      );
+      if (matchingProfFact) {
+        cf.value = matchingProfFact.value;
+      }
+    }
+  }
+
+  // Evaluate candidate questions and stopping policy
+  const isUnfamiliarDomain = isUnfamiliarTaskDomain(projectProfile);
+  const candidateQuestions = evaluateCandidateQuestions(
+    expert,
+    projectProfile,
+    inferredFacts,
+    confirmedFacts,
+    lastUserText,
+  );
+  const stoppingPolicy = evaluateStoppingPolicy(
+    projectProfile,
+    candidateQuestions,
+    lastUserText,
+  );
+
+  if (
+    stoppingPolicy.shouldStop &&
+    stoppingPolicy.outcome === "proceed_with_assumptions" &&
+    (Boolean(projectProfile.domainExtensions["interview_control"]) ||
+      isGenerateNowRequest(lastUserText))
+  ) {
+    projectProfile = ensureAssumptionsForMissingCoreFields(projectProfile);
+  }
+
+  // Identify unnecessary topics that should NEVER be asked because they are already present or irrelevant
   const unnecessaryTopics: string[] = [];
   for (const fact of inferredFacts) {
     if (fact.category === "technical") {
@@ -1224,14 +2124,30 @@ export function analyzeInterview(
       unnecessaryTopics.push("production format / style (already inferred)");
     }
   }
+  for (const q of candidateQuestions) {
+    if (
+      q.coverageStatus === "confirmed" ||
+      q.coverageStatus === "assumed_by_user" ||
+      q.coverageStatus === "domain_irrelevant"
+    ) {
+      const topicMsg = `${q.slot.label} (${q.selectionRationale})`;
+      if (!unnecessaryTopics.includes(topicMsg)) {
+        unnecessaryTopics.push(topicMsg);
+      }
+    }
+  }
 
   // Run intelligence detectors
   const activeSignals: IntelligenceSignal[] = [];
-  const lastUserText = userTexts[userTexts.length - 1] ?? "";
 
   if (lastUserText && userTexts.length > 1) {
     const vagueness = detectVagueness(lastUserText);
-    if (vagueness.isVague) {
+    if (
+      vagueness.isVague &&
+      !isUserDelegation(lastUserText) &&
+      !isSkipQuestionRequest(lastUserText) &&
+      !isGenerateNowRequest(lastUserText)
+    ) {
       activeSignals.push({
         type: "vagueness_detected",
         title: "Vague Answer Refinement",
@@ -1257,77 +2173,58 @@ export function analyzeInterview(
     activeSignals.push(gapCheck.knowledgeGap);
   }
 
-  // Calculate readiness score
-  // Factors:
-  // - Confirmed facts (up to 40 pts)
-  // - Inferred facts (up to 30 pts)
-  // - Critical questions resolved (up to 30 pts)
-  const confirmedScore = Math.min(40, confirmedFacts.length * 10);
-  const inferredScore = Math.min(30, inferredFacts.length * 10);
-  const criticalSlots = expert?.criticalSlots ?? [];
-  const criticalAnsweredCount = criticalSlots.filter(
-    (id) =>
-      confirmedFacts.some(
-        (f) => normalizeSlotId(f.slotId) === normalizeSlotId(id),
-      ) ||
-      inferredFacts.some((f) => f.id.includes(id) || factMatchesSlot(f, id)),
-  ).length;
-  const criticalRatio =
-    criticalSlots.length > 0 ? criticalAnsweredCount / criticalSlots.length : 1;
-  const criticalScore = Math.round(criticalRatio * 30);
+  // Sync any unresolved profile contradictions into activeSignals if not already present
+  for (const c of projectProfile.contradictions) {
+    if (
+      c.status === "unresolved" &&
+      !activeSignals.some((s) => s.type === "contradiction_detected")
+    ) {
+      activeSignals.push({
+        type: "contradiction_detected",
+        title: c.title,
+        description: c.description,
+        recommendation: c.recommendation,
+        severity: "warning",
+      });
+    }
+  }
 
-  const rawReadiness = confirmedScore + inferredScore + criticalScore;
+  // Calculate readiness score grounded in profile richness + stopping policy
+  const richFacets = countRichProfileFacets(projectProfile, inferredFacts);
+  const confirmedScore = Math.min(
+    45,
+    Math.max(confirmedFacts.length, projectProfile.confirmedFacts.length) * 10,
+  );
+  const inferredScore = Math.min(25, inferredFacts.length * 10);
+  const richnessScore = Math.min(30, richFacets * 5);
+
+  const rawReadiness = stoppingPolicy.shouldStop
+    ? Math.max(85, confirmedScore + inferredScore + richnessScore)
+    : Math.min(
+        78,
+        confirmedScore + inferredScore + Math.round(richnessScore * 0.5),
+      );
   const readinessScore = Math.min(100, Math.max(10, rawReadiness));
 
-  const isReadyForMasterPrompt =
-    readinessScore >= 80 &&
-    confirmedFacts.length + inferredFacts.length >= 4 &&
-    criticalRatio >= 0.75;
+  const isReadyForMasterPrompt = stoppingPolicy.shouldStop;
 
-  // Determine prioritized strategic focus based on interview progression:
-  // 1. Goal & audience -> 2. Features/journeys -> 3. Budget/free-tier -> 4. Tech stack ->
-  // 5. Integrations -> 6. Hosting/deploy -> 7. Security/privacy -> 8. Deliverables/criteria
+  // Determine prioritized strategic focus based on highest-value selected question or synthesis state
   let strategicFocus = "1. Clarifying Primary Goal & Target Audience";
-  if (
-    inferredFacts.some((f) => f.category === "audience") ||
-    confirmedFacts.length >= 1
-  ) {
-    strategicFocus = "2. Defining Required Features & Core User Journeys";
-  }
-  if (
-    confirmedFacts.length >= 2 ||
-    inferredFacts.some((f) => f.category === "business")
-  ) {
+  if (stoppingPolicy.shouldStop) {
     strategicFocus =
-      "3. Validating Budget, Free-Tier Limits & Cost Constraints";
-  }
-  if (
-    confirmedFacts.length >= 3 ||
-    inferredFacts.some((f) => f.category === "technical")
-  ) {
-    strategicFocus = "4. Pinpointing Exact Technology Stack & Architecture";
-  }
-  if (
-    confirmedFacts.length >= 4 ||
-    inferredFacts.some((f) => f.id.includes("integrations"))
-  ) {
-    strategicFocus = "5. Specifying External Integrations, APIs & Data Models";
-  }
-  if (
-    confirmedFacts.length >= 5 ||
-    inferredFacts.some((f) => f.id.includes("hosting"))
-  ) {
-    strategicFocus = "6. Establishing Hosting, Deployment & Secrets Security";
-  }
-  if (readinessScore >= 75 || confirmedFacts.length >= 6) {
-    strategicFocus =
-      "7. Finalizing Concrete Deliverables & Testable Acceptance Criteria";
+      stoppingPolicy.outcome === "proceed_with_assumptions"
+        ? "Synthesizing Master Prompts with Explicit Assumptions"
+        : "Finalizing Multi-Platform Master Prompts & Acceptance Criteria";
+  } else if (stoppingPolicy.selectedQuestion) {
+    strategicFocus = `Focusing on ${stoppingPolicy.selectedQuestion.slot.label}: ${stoppingPolicy.selectedQuestion.whyItMatters}`;
   }
 
   return {
-    goal,
+    goal: projectProfile.primaryGoal?.value || goal,
     expertId,
-    domain: expert?.name ?? "General Strategic Advisory",
+    domain: isUnfamiliarDomain
+      ? "Adaptive Task Advisory"
+      : (expert?.name ?? "General Strategic Advisory"),
     inferredFacts,
     confirmedFacts,
     activeSignals,
@@ -1336,10 +2233,51 @@ export function analyzeInterview(
     readinessScore,
     isReadyForMasterPrompt,
     questionNumber: confirmedFacts.length,
+    projectProfile,
+    isUnfamiliarDomain,
+    candidateQuestions,
+    stoppingPolicy,
   };
 }
 
-function factMatchesSlot(fact: InferredFact, slotId: string): boolean {
+/**
+ * Selects the highest-value next interview slot using information-value estimation
+ * over the shared ProjectProfile.
+ */
+export function selectNextInterviewSlot(
+  expert: Expert,
+  analysis: IntelligenceAnalysis,
+): Slot {
+  if (analysis.stoppingPolicy?.selectedQuestion) {
+    return analysis.stoppingPolicy.selectedQuestion.slot;
+  }
+
+  const candidates =
+    analysis.candidateQuestions ??
+    evaluateCandidateQuestions(
+      expert,
+      analysis.projectProfile,
+      analysis.inferredFacts,
+      analysis.confirmedFacts,
+    );
+
+  const topPositive = candidates.find((c) => c.expectedNetValue > -10);
+  if (topPositive) {
+    return topPositive.slot;
+  }
+
+  if (candidates.length > 0) {
+    return candidates[0].slot;
+  }
+
+  return (
+    expert.slots[
+      Math.min(analysis.questionNumber || 0, expert.slots.length - 1)
+    ] || expert.slots[0]
+  );
+}
+
+export function factMatchesSlot(fact: InferredFact, slotId: string): boolean {
   const f = normalizeSlotId(fact.id);
   const s = normalizeSlotId(slotId);
   if (s === f) return true;
@@ -1401,6 +2339,19 @@ export function buildAdaptiveConsultantPrompt(
           .join("\n\n")
       : "  ✓ No contradictions or severe vagueness currently detected. Maintain crisp momentum.";
 
+  const nextSlot = selectNextInterviewSlot(expert, analysis);
+  const policyOutcome = analysis.stoppingPolicy?.outcome ?? "ask_clarification";
+  const assumptionsSection =
+    analysis.stoppingPolicy &&
+    analysis.stoppingPolicy.assumptionsToDisclose.length > 0
+      ? `\n## EXPLICIT ASSUMPTIONS TO DISCLOSE:\n${analysis.stoppingPolicy.assumptionsToDisclose.map((a) => `  • ${a}`).join("\n")}`
+      : "";
+  const conflictsSection =
+    analysis.stoppingPolicy &&
+    analysis.stoppingPolicy.unresolvedConflictsToDisclose.length > 0
+      ? `\n## UNRESOLVED CONFLICTS TO DISCLOSE:\n${analysis.stoppingPolicy.unresolvedConflictsToDisclose.map((c) => `  • ${c}`).join("\n")}`
+      : "";
+
   return `
 
 # ====================================================================
@@ -1411,35 +2362,26 @@ You are Prompt Master's Adaptive Interview Intelligence Engine.
 You behave like an experienced, top-tier strategic consultant — NEVER like a form, questionnaire, or interrogation script.
 
 LOCKED USER GOAL: "${analysis.goal || "(infer from first user message)"}"
-SPECIALTY DOMAIN: ${expert.name}
+SPECIALTY DOMAIN: ${analysis.domain || expert.name}
 CURRENT STRATEGIC FOCUS: ${analysis.strategicFocus}
-READINESS SCORE: ${analysis.readinessScore}% (Master Prompt Threshold: 80%+)
+STOPPING POLICY DECISION: ${policyOutcome.toUpperCase()} (${analysis.stoppingPolicy?.reason ?? "Continue adaptive discovery"})
+RECOMMENDED NEXT QUESTION TOPIC: ${nextSlot.label} — "${nextSlot.question}" (Why it matters: ${nextSlot.why})
 
 ## 1. MANDATORY INTERVIEW DIRECTIVES:
-• **NEVER USE FIXED QUESTIONS**: Every question must be dynamically generated on the fly tailored to their specific goal and previous words.
-• **INFER MISSING INFORMATION**: Deduce as much context as possible from their goal and previous messages. Treat inferred facts as established truth.
-• **PRIORITIZE QUESTIONS IN THIS HIERARCHY**:
-  1. Primary goal and target audience.
-  2. Required features and core user journeys.
-  3. Budget and free-tier constraints (including $0 budget).
-  4. Preferred or required technology / frameworks.
-  5. External integrations and data requirements.
-  6. Hosting and deployment.
-  7. Security and privacy.
-  8. Deliverables and acceptance criteria.
-  Do NOT ask all these questions mechanically. Adapt to the project and stop when sufficient information is available.
-• **DETECT & RESOLVE CONTRADICTIONS**: When you notice conflicting statements (e.g. $0 budget vs expensive paid ads, or wanting enterprise microservices for a simple blog), diplomatically surface the tension with curiosity and guide them toward alignment.
-• **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), provide 2-4 concrete, real-world anchors or options to help them decide.
-• **DETECT UNREALISTIC EXPECTATIONS**: Validate ambition while grounding the scope into an achievable Phase 1 MVP.
-• **DETECT KNOWLEDGE GAPS**: Share a crisp 1-sentence consultant insight before framing your next question.
+• **SELECT QUESTIONS BY INFORMATION VALUE**: Ask only about missing information that materially changes the final prompt. Never follow a rigid script.
+• **EXPLAIN WHY A QUESTION MATTERS**: Briefly explain in plain, friendly language why your question matters for their specific project. Never expose internal scoring numbers or technical jargon.
+• **AVOID UNNECESSARY QUESTIONS**: Never ask for information already supplied in the profile. If the user says "you decide" or "I don't know", apply a sensible assumption, label it clearly, and move forward without repeating the question.
+• **DETECT & RESOLVE CONTRADICTIONS**: When you notice conflicting statements (e.g. $0 budget vs expensive paid ads, or wanting enterprise microservices for a simple blog), diplomatically surface the tension and help resolve it. If the user chooses to proceed without resolving a conflict, explicitly disclose the unresolved conflict.
+• **DETECT VAGUE RESPONSES**: When answers are broad ("make money", "good", "standard", "everyone"), provide 2-4 concrete, real-world options to help them decide.
 • **HANDLE CLARIFICATION REQUESTS GRACEFULLY**: If the user asks "Why am I being asked this?", asks what a technical term means, or requests clarification, explain the concept warmly in 1-2 plain-English sentences and re-frame the current question (Question ${analysis.questionNumber + 1}) with concrete options without skipping or double-incrementing.
-• **OPTIMIZE FOR NATURAL CONVERSATION**: Speak in a warm, curious, and professional tone. Keep response quality exceptionally high.
 
 ## 2. INFORMATION ALREADY INFERRED BY INTELLIGENCE (DO NOT ASK REDUNDANT QUESTIONS!):
 ${inferredList}
 
 ## 3. INFORMATION CONFIRMED BY THE USER:
 ${confirmedList}
+
+${formatProjectProfileForConsultant(analysis.projectProfile)}${assumptionsSection}${conflictsSection}
 
 ## 4. STRICT NEGATIVE CONSTRAINTS (UNNECESSARY TOPICS):
 ${unnecessaryList}
@@ -1453,33 +2395,22 @@ ${signalsSection}
 
 ## 6. CRITICAL REQUIREMENTS FOR THE FINAL MASTER PROMPTS (WHEN TRIGGERED):
 When generating final master prompts, you MUST strictly enforce:
-A. TECHNICAL FEASIBILITY:
-   • Explicitly respect the user's stated budget, including a $0 budget when specified. Never assume paid features or unrestricted API usage.
-   • Identify free-tier limits, quotas, storage limits, bandwidth limits, usage restrictions, and deployment constraints.
-   • Distinguish genuinely free services from free trials or features requiring billing activation.
-   • Specify required integrations, explaining purpose, dependencies, and configuration requirements.
-   • Identify auth, database, API, hosting, file storage, email, and third-party services where applicable.
-   • Mark unverified limits with [VERIFY: provider pricing/quota limits] rather than inventing numbers.
-   • Provide realistic zero-cost alternatives when a requested feature cannot be implemented within user constraints.
-   • Separate essential Phase 1 MVP features from optional Phase 2 enhancements.
-   • For web apps, specify hosting, env vars, secret management (never expose API keys in client), a11y (WCAG AA), and security.
-B. IMPLEMENTATION SPECIFICITY:
-   • Exact technology stack (frontend, backend, database, authentication, hosting, AI provider).
-   • Specific tools, frameworks, libraries, and APIs (e.g. React 19, Vite, Tailwind CSS v4, Zod, TanStack Query, Lucide).
-   • Purpose of major components and interactions.
-   • Required pages, features, user flows, data models/schemas, and edge cases.
-   • Functional requirements (FR-1, FR-2...) and non-functional requirements (performance, accessibility, mobile).
-   • Input validation, loading states, empty states, error handling, and success feedback.
-   • Setup instructions, environment variables with security classification, deployment steps.
-   • Concrete deliverables and an explicit Definition of Done.
-   • Testable acceptance criteria (Given/When/Then or objective checklist) and testing requirements.
-   • Never use vague phrases such as "make it modern," "ensure security," or "add proper error handling."
+A. CANONICAL SPECIFICATION & ANTI-FABRICATION DISCIPLINE:
+   • Generate all 7 prompts from the single validated ProjectProfile above (primary objective, confirmed facts, constraints, explicit exclusions, target deliverable/format, acceptance criteria, active assumptions, and unresolved contradictions).
+   • Do NOT invent unrequested requirements, features, or domain constraints to make the prompt look more complete. Keep inferred and assumed items explicitly labeled.
+B. TASK-MATCHED STRUCTURE (DO NOT CROSS-POLLUTE DOMAINS):
+   • Match the prompt structure to the actual task category (Software development & debugging, Research & fact-checking, Study & tutoring, Business planning, Creative work, Writing & editing, Data analysis, or General-purpose tasks).
+   • Do NOT force a coding prompt to contain academic research citations, and do NOT force a writing, creative, study, or research prompt to contain software test commands (e.g. tsc --noEmit, Zod, .env.example) unless relevant to the user's task.
+C. FEASIBILITY, VERIFICATION & HONEST PLATFORM STRATEGIES:
+   • Explicitly respect stated budget and resource constraints (including $0 free-tier guardrails when applicable) and mark unverified external quotas, prices, or claims with [VERIFY: ...].
+   • When modifying a codebase (software tasks / Cursor / Windsurf), specify how to preserve existing behavior, make minimal scoped changes, isolate secrets in server-side routes (.env.example), and report test execution honestly (never claim unexecuted tests passed).
+   • When conducting research (research tasks / Perplexity), specify credible primary source standards, citation expectations, and strict separation of verified evidence from analytical inference.
+   • Adapt genuinely to each platform (ChatGPT, Claude, Gemini, Perplexity, Grok, Cursor, Windsurf) based on documented capabilities—never claim that magic wording tricks activate hidden reasoning, and only include multimodal instructions for Gemini when the task involves media/multimodal inputs.
 
 ## 7. REQUIRED OUTPUT STRUCTURE:
-1. Speak in a warm, razor-sharp, natural consultant voice (1-3 sentences acknowledging or contextualizing the last answer).
+1. Speak in a warm, razor-sharp, natural consultant voice (1-2 sentences acknowledging the last answer and explaining why the next question matters for their outcome).
 2. Ask exactly ONE numbered question: "**Question ${analysis.questionNumber + 1}:** [Your dynamic question]"
-3. On the very last line, include the hidden machine slot tag representing the facet you are exploring: \`<!--slot:slot_id-->\`
-   (Available slot IDs: ${expert.slots.map((s) => s.id).join(", ")})
+3. On the very last line, include the hidden machine slot tag representing the facet you are exploring: \`<!--slot:${nextSlot.id}-->\`
 
-When Readiness is 80%+ and you have sufficient domain depth, trigger the AI Optimization Engine: generate the SEVEN model-specific master prompts (chatgpt, claude, gemini, perplexity, grok, cursor, windsurf) followed by the certificate. Never generate identical prompts across models.`;
+When STOPPING POLICY DECISION is GENERATE_FINAL_PROMPT or PROCEED_WITH_ASSUMPTIONS, trigger the AI Optimization Engine immediately: disclose any explicit assumptions or unresolved conflicts, and generate the SEVEN model-specific master prompts (chatgpt, claude, gemini, perplexity, grok, cursor, windsurf) followed by the certificate. Never generate identical prompts across models.`;
 }

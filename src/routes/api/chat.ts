@@ -8,6 +8,7 @@ import {
   EXPERTS,
   TRIAGE_PROMPT,
   detectExpert,
+  isVagueIntent,
   type ExpertId,
 } from "@/lib/experts";
 import {
@@ -15,8 +16,13 @@ import {
   buildAdaptiveConsultantPrompt,
   isClarificationOrMetaRequest,
   normalizeSlotId,
+  selectNextInterviewSlot,
 } from "@/lib/interview-intelligence";
-import { ensureAllSevenModels } from "@/lib/ai-optimization-engine";
+import {
+  ALL_MODELS,
+  ensureAllSevenModels,
+  type ModelKey,
+} from "@/lib/ai-optimization-engine";
 import { evaluatePromptQuality } from "@/lib/prompt-evaluator";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -48,6 +54,35 @@ Your primary mission:
 - Treat Prompt Master as a software application, not merely as a general prompt-engineering methodology.
 `;
 
+export function resolveGoalAndExpert(
+  uiMessages: UIMessage[],
+  requestedExpert?: ExpertId | null,
+): { resolvedExpert: ExpertId | null; goalIndex: number } {
+  const validRequested =
+    requestedExpert && EXPERTS[requestedExpert] ? requestedExpert : null;
+
+  let goalIndex = uiMessages.findIndex(
+    (m) => m?.role === "user" && Boolean(detectExpert(messageTextFromUi(m))),
+  );
+  if (goalIndex === -1) {
+    goalIndex = uiMessages.findIndex((m) => {
+      if (m?.role !== "user") return false;
+      const text = messageTextFromUi(m).trim();
+      return text.length > 0 && !isVagueIntent(text);
+    });
+  }
+
+  const detectedFromGoal =
+    goalIndex >= 0
+      ? (detectExpert(messageTextFromUi(uiMessages[goalIndex])) ?? "business")
+      : null;
+
+  return {
+    resolvedExpert: validRequested ?? detectedFromGoal,
+    goalIndex,
+  };
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
@@ -69,32 +104,37 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
-        const uiMessages = messages as UIMessage[];
-        const goalIndex = expert
-          ? uiMessages.findIndex(
-              (m) => m.role === "user" && detectExpert(messageTextFromUi(m)),
-            )
-          : -1;
+        const uiMessages = (messages as UIMessage[]).filter(
+          (m) => m && typeof m === "object" && typeof m.role === "string",
+        );
+        if (uiMessages.length === 0) {
+          return new Response("No valid messages provided", { status: 400 });
+        }
+
+        const { resolvedExpert, goalIndex } = resolveGoalAndExpert(
+          uiMessages,
+          expert ?? null,
+        );
         const modelMessages =
           goalIndex >= 0 ? uiMessages.slice(goalIndex) : uiMessages;
 
         let systemPrompt =
-          expert && EXPERTS[expert]
-            ? EXPERTS[expert].systemPrompt
+          resolvedExpert && EXPERTS[resolvedExpert]
+            ? EXPERTS[resolvedExpert].systemPrompt
             : TRIAGE_PROMPT;
 
         // Augment system prompt with Prompt Master software core instructions
         systemPrompt = `${PROMPT_MASTER_CORE_INSTRUCTION}\n\n${systemPrompt}`;
 
         // Interview Intelligence Engine — Real-time adaptive consultant reasoning
-        if (expert && EXPERTS[expert] && goalIndex >= 0) {
+        if (resolvedExpert && EXPERTS[resolvedExpert] && goalIndex >= 0) {
           const relevantMessages = uiMessages.slice(goalIndex);
           const intelligenceAnalysis = analyzeInterview(
             relevantMessages,
-            expert,
+            resolvedExpert,
           );
           systemPrompt += buildAdaptiveConsultantPrompt(
-            EXPERTS[expert],
+            EXPERTS[resolvedExpert],
             intelligenceAnalysis,
           );
         }
@@ -117,9 +157,9 @@ export const Route = createFileRoute("/api/chat")({
               },
             });
 
-            // Inspect the first chunk to catch immediate 401/403/API_KEY_INVALID failures
+            // Inspect the first chunks to catch immediate 401/403/API_KEY_INVALID failures
             const rawStream = streamResult.toUIMessageStream({
-              originalMessages: messages as UIMessage[],
+              originalMessages: uiMessages,
               onError(err) {
                 return sanitizeAIErrorMessage(err);
               },
@@ -132,30 +172,111 @@ export const Route = createFileRoute("/api/chat")({
             // If the stream immediately failed with an error chunk
             if (
               streamHasFailed ||
+              (!firstChunk.done && firstChunk.value?.type === "error") ||
               (!secondChunk.done && secondChunk.value?.type === "error")
             ) {
               const fallbackText = generateAdaptiveConsultantText(
-                expert ?? null,
+                resolvedExpert,
                 uiMessages,
                 goalIndex,
               );
               return createTextUIMessageStream(fallbackText);
             }
 
-            // Stream is healthy — forward buffered chunks and stream remainder seamlessly
+            // Stream is healthy — forward buffered chunks, monitor mid-stream health, and ensure complete synthesis
             const healthyStream = new ReadableStream({
               async start(controller) {
-                if (firstChunk.value) controller.enqueue(firstChunk.value);
-                if (secondChunk.value) controller.enqueue(secondChunk.value);
+                let accumulatedText = "";
+                let activeTextId = "1";
+                let midStreamError = false;
+                let sawTextStart = false;
+                let sawTextEnd = false;
+                let sawFinish = false;
+
+                const inspectAndForward = (chunk: {
+                  type?: string;
+                  id?: string;
+                  text?: string;
+                  delta?: string;
+                }) => {
+                  if (!chunk) return;
+                  if (chunk.type === "error") {
+                    midStreamError = true;
+                    return;
+                  }
+                  if (chunk.type === "text-start" && chunk.id) {
+                    activeTextId = chunk.id;
+                    sawTextStart = true;
+                  }
+                  if (chunk.type === "text-delta") {
+                    if (chunk.id) activeTextId = chunk.id;
+                    const delta =
+                      typeof chunk.text === "string"
+                        ? chunk.text
+                        : typeof chunk.delta === "string"
+                          ? chunk.delta
+                          : "";
+                    accumulatedText += delta;
+                  }
+                  if (chunk.type === "text-end") {
+                    sawTextEnd = true;
+                    // Hold text-end until we verify if synthesis completion is needed
+                    return;
+                  }
+                  if (chunk.type === "finish") {
+                    sawFinish = true;
+                    // Hold finish until we verify if synthesis completion is needed
+                    return;
+                  }
+                  controller.enqueue(chunk);
+                };
+
+                if (firstChunk.value) inspectAndForward(firstChunk.value);
+                if (secondChunk.value) inspectAndForward(secondChunk.value);
+
                 try {
                   while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    controller.enqueue(value);
+                    inspectAndForward(value);
                   }
                 } catch {
-                  // Handled silently
+                  midStreamError = true;
                 } finally {
+                  const completionSuffix = completeStreamOutputIfNeeded(
+                    accumulatedText,
+                    midStreamError || streamHasFailed,
+                    resolvedExpert,
+                    uiMessages,
+                    goalIndex,
+                  );
+                  if (completionSuffix) {
+                    if (!sawTextStart) {
+                      controller.enqueue({
+                        type: "text-start",
+                        id: activeTextId,
+                      });
+                      sawTextStart = true;
+                    }
+                    const chunkSize = 80;
+                    for (
+                      let i = 0;
+                      i < completionSuffix.length;
+                      i += chunkSize
+                    ) {
+                      controller.enqueue({
+                        type: "text-delta",
+                        id: activeTextId,
+                        text: completionSuffix.slice(i, i + chunkSize),
+                      });
+                    }
+                  }
+                  if (sawTextStart || sawTextEnd) {
+                    controller.enqueue({ type: "text-end", id: activeTextId });
+                  }
+                  if (sawFinish || sawTextStart) {
+                    controller.enqueue({ type: "finish" });
+                  }
                   controller.close();
                 }
               },
@@ -164,7 +285,7 @@ export const Route = createFileRoute("/api/chat")({
             return createUIMessageStreamResponse({ stream: healthyStream });
           } catch {
             const fallbackText = generateAdaptiveConsultantText(
-              expert ?? null,
+              resolvedExpert,
               uiMessages,
               goalIndex,
             );
@@ -174,7 +295,7 @@ export const Route = createFileRoute("/api/chat")({
 
         // When API key is not configured, activate Adaptive Consultant Engine directly
         const fallbackText = generateAdaptiveConsultantText(
-          expert ?? null,
+          resolvedExpert,
           uiMessages,
           goalIndex,
         );
@@ -184,10 +305,150 @@ export const Route = createFileRoute("/api/chat")({
   },
 });
 
-function messageTextFromUi(message: UIMessage): string {
+export function messageTextFromUi(
+  message: UIMessage | undefined | null,
+): string {
+  if (!message || !Array.isArray(message.parts)) return "";
   return message.parts
-    .map((part) => (part.type === "text" ? part.text : ""))
+    .map((part) =>
+      part?.type === "text" && typeof part.text === "string" ? part.text : "",
+    )
     .join("");
+}
+
+const STREAM_MODEL_FENCE_RE =
+  /```(chatgpt|claude|gemini|perplexity|grok|cursor|windsurf)\s*\n([\s\S]*?)```/gi;
+
+/**
+ * Inspects streamed assistant output and returns any necessary completion suffix:
+ * - If the stream failed with zero text emitted, returns the full deterministic fallback response.
+ * - If the response initiated a final prompt synthesis (or failed mid-synthesis) with fewer than all 7
+ *   platform blocks or without a deterministic certificate, completes all missing platform blocks and
+ *   appends the authoritative deterministic `<!--certificate ...-->` block.
+ * - If the stream dropped mid-question without emitting a `<!--slot:...-->` tag, appends the question/slot tag.
+ */
+export function completeStreamOutputIfNeeded(
+  accumulatedText: string,
+  streamInterrupted: boolean,
+  expertId: ExpertId | null,
+  uiMessages: UIMessage[],
+  goalIndex: number,
+): string {
+  const trimmed = accumulatedText.trim();
+  if (!trimmed) {
+    return generateAdaptiveConsultantText(expertId, uiMessages, goalIndex);
+  }
+
+  const hasAnyModelFence =
+    /```(chatgpt|claude|gemini|perplexity|grok|cursor|windsurf)\b/i.test(
+      accumulatedText,
+    ) || /here are your master prompts/i.test(accumulatedText);
+
+  if (hasAnyModelFence && expertId && EXPERTS[expertId] && goalIndex >= 0) {
+    const found: Partial<Record<ModelKey, string>> = {};
+    let m: RegExpExecArray | null;
+    STREAM_MODEL_FENCE_RE.lastIndex = 0;
+    while ((m = STREAM_MODEL_FENCE_RE.exec(accumulatedText)) !== null) {
+      const key = m[1].toLowerCase() as ModelKey;
+      const body = m[2].trim();
+      if (body.length >= 30) {
+        found[key] = body;
+      }
+    }
+
+    const relevantMessages = uiMessages.slice(goalIndex);
+    const analysis = analyzeInterview(relevantMessages, expertId);
+    const goal = relevantMessages[0]
+      ? messageTextFromUi(relevantMessages[0]).trim()
+      : "Execute strategic project plan";
+    const optContext = {
+      goal: goal || "Execute strategic project plan",
+      expertDomain: expertId,
+      budget:
+        analysis.projectProfile.budget?.value ??
+        analysis.confirmedFacts.find(
+          (f) =>
+            f.slotId === "budget" || f.label.toLowerCase().includes("budget"),
+        )?.value,
+      facts: [
+        ...analysis.confirmedFacts.map((f) => `${f.label}: ${f.value}`),
+        ...analysis.inferredFacts.map(
+          (f) => `${f.label}: ${f.value} (Inferred)`,
+        ),
+      ],
+      projectProfile: analysis.projectProfile,
+    };
+
+    const resolvedPrompts = ensureAllSevenModels(found, optContext);
+    const missingModels = ALL_MODELS.filter((mod) => !found[mod.key]);
+    const hasCert = /<!--\s*certificate[\s\S]*?-->/i.test(accumulatedText);
+
+    if (missingModels.length === 0 && hasCert && !streamInterrupted) {
+      return "";
+    }
+
+    let suffix = "";
+    // If the stream was interrupted inside an unclosed code fence, close it cleanly first
+    const fenceCount = (accumulatedText.match(/```/g) || []).length;
+    if (fenceCount % 2 === 1) {
+      suffix += "\n```\n\n";
+    } else if (!accumulatedText.endsWith("\n\n")) {
+      suffix += "\n\n";
+    }
+
+    for (const mod of missingModels) {
+      suffix += `\`\`\`${mod.key}\n${resolvedPrompts[mod.key]}\n\`\`\`\n\n`;
+    }
+
+    if (!hasCert || missingModels.length > 0) {
+      const evalResult = evaluatePromptQuality(resolvedPrompts.chatgpt, {
+        budget: optContext.budget,
+        goal: optContext.goal,
+        domain: expertId,
+        projectProfile: analysis.projectProfile,
+      });
+      suffix += `<!--certificate
+clarity: ${evalResult.dimensions.clarity.score}
+context: ${evalResult.dimensions.context.score}
+constraints: ${evalResult.dimensions.constraints.score}
+audience: ${evalResult.dimensions.audience.score}
+output: ${evalResult.dimensions.outputRequirements.score}
+completeness: ${evalResult.dimensions.completeness.score}
+technical_feasibility: ${evalResult.dimensions.technicalFeasibility.score}
+implementation_specificity: ${evalResult.dimensions.implementationSpecificity.score}
+overall: ${evalResult.overallScore}
+revisions: 2
+-->`;
+    }
+
+    return suffix;
+  }
+
+  // If an interview turn was interrupted mid-stream before emitting a slot tag
+  if (
+    streamInterrupted &&
+    expertId &&
+    EXPERTS[expertId] &&
+    goalIndex >= 0 &&
+    !/<!--\s*slot\s*:/i.test(accumulatedText)
+  ) {
+    const fallback = generateAdaptiveConsultantText(
+      expertId,
+      uiMessages,
+      goalIndex,
+    );
+    const slotMatch = /<!--\s*slot\s*:\s*([a-zA-Z0-9_\-\s]+?)\s*-->/i.exec(
+      fallback,
+    );
+    if (!/\*\*Question\s+\d+:\*\*/i.test(accumulatedText)) {
+      return `\n\n${fallback}`;
+    }
+    if (slotMatch) {
+      return `\n\n${slotMatch[0]}`;
+    }
+  }
+
+  return "";
 }
 
 function createTextUIMessageStream(text: string): Response {
@@ -195,13 +456,15 @@ function createTextUIMessageStream(text: string): Response {
     start(controller) {
       controller.enqueue({ type: "start" });
       controller.enqueue({ type: "text-start", id: "1" });
-      const chunkSize = 40;
-      for (let i = 0; i < text.length; i += chunkSize) {
-        controller.enqueue({
-          type: "text-delta",
-          id: "1",
-          text: text.slice(i, i + chunkSize),
-        });
+      const chunks = text.split(/(?<=\n)/);
+      for (const chunk of chunks) {
+        if (chunk) {
+          controller.enqueue({
+            type: "text-delta",
+            id: "1",
+            text: chunk,
+          });
+        }
       }
       controller.enqueue({ type: "text-end", id: "1" });
       controller.enqueue({ type: "finish" });
@@ -212,7 +475,7 @@ function createTextUIMessageStream(text: string): Response {
   return createUIMessageStreamResponse({ stream: customStream });
 }
 
-function generateAdaptiveConsultantText(
+export function generateAdaptiveConsultantText(
   expertId: ExpertId | null,
   uiMessages: UIMessage[],
   goalIndex: number,
@@ -246,31 +509,55 @@ For example:
     lastUserText.toLowerCase().includes("regenerate all 7") ||
     lastUserText.toLowerCase().includes("final prompt") ||
     lastUserText.toLowerCase().includes("master prompt") ||
-    analysis.isReadyForMasterPrompt;
+    analysis.isReadyForMasterPrompt ||
+    Boolean(analysis.stoppingPolicy?.shouldStop);
 
   if (isFinalPromptRequest) {
     const optContext = {
       goal: goal || "Execute strategic project plan",
       expertDomain: expertId,
-      budget: analysis.confirmedFacts.find(
-        (f) =>
-          f.slotId === "budget" || f.label.toLowerCase().includes("budget"),
-      )?.value,
+      budget:
+        analysis.projectProfile.budget?.value ??
+        analysis.confirmedFacts.find(
+          (f) =>
+            f.slotId === "budget" || f.label.toLowerCase().includes("budget"),
+        )?.value,
       facts: [
         ...analysis.confirmedFacts.map((f) => `${f.label}: ${f.value}`),
         ...analysis.inferredFacts.map(
           (f) => `${f.label}: ${f.value} (Inferred)`,
         ),
       ],
+      projectProfile: analysis.projectProfile,
     };
     const prompts = ensureAllSevenModels({}, optContext);
     const evalResult = evaluatePromptQuality(prompts.chatgpt, {
       budget: optContext.budget,
       goal: optContext.goal,
       domain: expertId,
+      projectProfile: analysis.projectProfile,
     });
 
-    return `Here are your master prompts — engineered individually for each AI model's unique architecture:
+    const assumptionsDisclosed =
+      analysis.stoppingPolicy?.assumptionsToDisclose ?? [];
+    const conflictsDisclosed =
+      analysis.stoppingPolicy?.unresolvedConflictsToDisclose ?? [];
+
+    const disclosureBlocks: string[] = [];
+    if (assumptionsDisclosed.length > 0) {
+      disclosureBlocks.push(
+        `**Explicit Assumptions Applied:**\n${assumptionsDisclosed.map((a) => `• ${a}`).join("\n")}`,
+      );
+    }
+    if (conflictsDisclosed.length > 0) {
+      disclosureBlocks.push(
+        `**Unresolved Requirement Conflicts (Disclosed in Prompts):**\n${conflictsDisclosed.map((c) => `• ${c}`).join("\n")}`,
+      );
+    }
+    const disclosureIntro =
+      disclosureBlocks.length > 0 ? `${disclosureBlocks.join("\n\n")}\n\n` : "";
+
+    return `${disclosureIntro}Here are your master prompts — engineered individually for each AI model's unique architecture:
 
 \`\`\`chatgpt
 ${prompts.chatgpt}
@@ -316,18 +603,15 @@ revisions: 2
 Copy the prompt tailored for your target platform to achieve the highest possible output quality.`;
   }
 
-  const answeredSlotIds = new Set(
-    analysis.confirmedFacts.map((f) => normalizeSlotId(f.slotId)),
-  );
-  const nextSlot =
-    expert.slots.find((s) => !answeredSlotIds.has(normalizeSlotId(s.id))) ||
-    expert.slots[
-      Math.min(analysis.questionNumber || 0, expert.slots.length - 1)
-    ] ||
-    expert.slots[0];
+  const nextSlot = selectNextInterviewSlot(expert, analysis);
+  const selectedCandidate = analysis.stoppingPolicy?.selectedQuestion;
 
-  const qNum = Math.max(1, analysis.questionNumber || 1);
-  const qText = getSlotPromptQuestion(expertId, nextSlot.id, goal);
+  const qNum = analysis.questionNumber + 1;
+  const qText =
+    selectedCandidate?.coverageStatus === "contradictory" &&
+    selectedCandidate.slot.question
+      ? selectedCandidate.slot.question
+      : getSlotPromptQuestion(expertId, nextSlot.id, goal, nextSlot.question);
 
   if (isClarificationOrMetaRequest(lastUserText)) {
     return `Great question! In strategic prompt engineering, exploring your **${nextSlot.label}** is critical because ${nextSlot.why}. Without this context, AI models default to generic boilerplate.
@@ -344,12 +628,16 @@ Let's continue:
 
   let bridge =
     "Excellent. Let's build out the foundational context for your master prompt.";
-  if (primarySignal) {
+  if (selectedCandidate?.coverageStatus === "contradictory") {
+    bridge = `Before generating your prompt, let's clarify an important conflict: ${selectedCandidate.whyItMatters}`;
+  } else if (primarySignal) {
     bridge = `${primarySignal.description} ${primarySignal.recommendation}`;
   } else if (latestConfirmed) {
-    bridge = `Got it — locking in **${latestConfirmed.label}** (${latestConfirmed.value}).`;
+    bridge = `Got it — locking in **${latestConfirmed.label}** (${latestConfirmed.value}). Clarifying your **${nextSlot.label.toLowerCase()}** next matters because ${nextSlot.why}.`;
   } else if (lastUserText.length > 0 && relevantMessages.length > 2) {
-    bridge = "Got it — that gives us clear clarity on that piece.";
+    bridge = `Got it — I've noted a sensible default for that so we can keep moving. Next, clarifying your **${nextSlot.label.toLowerCase()}** helps because ${nextSlot.why}.`;
+  } else if (nextSlot.why) {
+    bridge = `Excellent. Understanding your **${nextSlot.label.toLowerCase()}** up front matters because ${nextSlot.why}.`;
   }
 
   return `${bridge}
@@ -363,8 +651,28 @@ function getSlotPromptQuestion(
   expertId: ExpertId,
   slotId: string,
   goal: string,
+  fallbackQuestion?: string,
 ): string {
   const normSlot = normalizeSlotId(slotId);
+
+  if (normSlot === "deliverable_format") {
+    return (
+      fallbackQuestion ||
+      "What specific output format, structure, or deliverable do you want the AI to produce?"
+    );
+  }
+  if (normSlot === "constraints_scope") {
+    return (
+      fallbackQuestion ||
+      "Are there any key constraints, boundaries, or things the output must avoid?"
+    );
+  }
+  if (normSlot === "success_criteria") {
+    return (
+      fallbackQuestion ||
+      "What would make the final output a complete success for your needs?"
+    );
+  }
 
   switch (expertId) {
     case "website": {
@@ -394,7 +702,10 @@ function getSlotPromptQuestion(
         case "acceptance_criteria":
           return "What are your testable acceptance criteria or definition of done for the build?";
         default:
-          return `Could you tell me more about your requirements for ${slotId.replace(/_/g, " ")}?`;
+          return (
+            fallbackQuestion ||
+            `Could you tell me more about your requirements for ${slotId.replace(/_/g, " ")}?`
+          );
       }
     }
     case "business": {
@@ -418,7 +729,10 @@ function getSlotPromptQuestion(
         case "risk":
           return "What is your risk tolerance, and what is the biggest potential bottleneck you foresee?";
         default:
-          return `Could you clarify your plans regarding ${slotId.replace(/_/g, " ")}?`;
+          return (
+            fallbackQuestion ||
+            `Could you clarify your plans regarding ${slotId.replace(/_/g, " ")}?`
+          );
       }
     }
     case "study": {
@@ -442,7 +756,10 @@ function getSlotPromptQuestion(
         case "budget":
           return "What is your budget for learning materials (100% free resources, or willing to buy books/courses)?";
         default:
-          return `What are your preferences regarding ${slotId.replace(/_/g, " ")}?`;
+          return (
+            fallbackQuestion ||
+            `What are your preferences regarding ${slotId.replace(/_/g, " ")}?`
+          );
       }
     }
     case "creator": {
@@ -468,10 +785,16 @@ function getSlotPromptQuestion(
         case "language":
           return "What language or regional audience are you targeting?";
         default:
-          return `Could you provide more context on your ${slotId.replace(/_/g, " ")}?`;
+          return (
+            fallbackQuestion ||
+            `Could you provide more context on your ${slotId.replace(/_/g, " ")}?`
+          );
       }
     }
     default:
-      return `What are your primary requirements for ${slotId.replace(/_/g, " ")}?`;
+      return (
+        fallbackQuestion ||
+        `What are your primary requirements for ${slotId.replace(/_/g, " ")}?`
+      );
   }
 }

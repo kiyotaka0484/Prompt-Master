@@ -16,11 +16,19 @@ import {
   normalizeSlotId,
   SLOT_TAG_RE,
   isClarificationOrMetaRequest,
+  inferInformation,
+  detectContradictions,
   analyzeInterview,
   buildAdaptiveConsultantPrompt,
 } from "../src/lib/interview-intelligence";
 
-import { EXPERTS } from "../src/lib/experts";
+import { EXPERTS, detectExpert } from "../src/lib/experts";
+import { normalizeThreadRecord } from "../src/lib/threads";
+import {
+  completeStreamOutputIfNeeded,
+  generateAdaptiveConsultantText,
+  resolveGoalAndExpert,
+} from "../src/routes/api/chat";
 import type { UIMessage } from "ai";
 
 // ---------------------------------------------------------------------------
@@ -521,4 +529,245 @@ test("Fix 4: No unsupported guarantees about free tiers or commercial hosting el
       `${model.key} must flag unverified quotas/terms with [VERIFY: ...]`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// AUDIT REGRESSION TESTS — PHASES 1, 2 & 3
+// ---------------------------------------------------------------------------
+
+test("Audit Fix 5: Substantive non-keyword goals are preserved by detectExpert, normalizeThreadRecord, and resolveGoalAndExpert", () => {
+  const goalText =
+    "I want to organize a neighborhood dog walking collective in Austin";
+  const detected = detectExpert(goalText);
+  assert.ok(
+    detected !== null,
+    "Substantive 4+ word non-vague goal must not return null",
+  );
+
+  const thread = normalizeThreadRecord({
+    id: "thread-1",
+    expert: "business",
+    title: "Dog walking",
+    updatedAt: Date.now(),
+    messages: [
+      {
+        id: "m-1",
+        role: "user",
+        parts: [{ type: "text", text: goalText }],
+      },
+    ],
+  });
+  assert.equal(
+    thread.messages.length,
+    1,
+    "Thread messages must not be wiped to []",
+  );
+  assert.equal(thread.expert, "business");
+
+  const { resolvedExpert, goalIndex } = resolveGoalAndExpert(
+    thread.messages,
+    "business",
+  );
+  assert.equal(resolvedExpert, "business");
+  assert.equal(goalIndex, 0);
+});
+
+test("Audit Fix 6: Budget inference avoids false positives on non-monetary numbers while extracting real budgets", () => {
+  const nonBudgetFacts = inferInformation(
+    "Grow my newsletter to 1000 subscribers in 2 months",
+    [],
+    "creator",
+  );
+  const falseBudget = nonBudgetFacts.find((f) => f.id === "budget_constraint");
+  assert.equal(
+    falseBudget,
+    undefined,
+    "Non-monetary numbers ('1000 subscribers in 2 months') must not trigger a budget inference",
+  );
+
+  const realBudgetFacts = inferInformation(
+    "Launch a B2B SaaS with a starting budget of $500",
+    [],
+    "business",
+  );
+  const validBudget = realBudgetFacts.find((f) => f.id === "budget_constraint");
+  assert.ok(validBudget, "Explicit '$500' budget must be inferred");
+  assert.match(validBudget.value, /\$500/);
+});
+
+test("Audit Fix 7: Vague answers and duplicate slot answers do not inflate confirmedFacts or questionNumber", () => {
+  const messages: UIMessage[] = [
+    {
+      id: "m-1",
+      role: "user",
+      parts: [{ type: "text", text: "Build a B2B SaaS invoice app" }],
+    },
+    {
+      id: "m-2",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "**Question 1:** Who is your target audience? <!--slot:audience-->",
+        },
+      ],
+    },
+    {
+      id: "m-3",
+      role: "user",
+      parts: [{ type: "text", text: "idk" }],
+    },
+    {
+      id: "m-4",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "Let's narrow it down. **Question 1:** Who is your target audience? <!--slot:audience-->",
+        },
+      ],
+    },
+    {
+      id: "m-5",
+      role: "user",
+      parts: [
+        {
+          type: "text",
+          text: "Independent dental clinics with 2-10 practitioners",
+        },
+      ],
+    },
+  ];
+
+  const analysis = analyzeInterview(messages, "website");
+  assert.equal(
+    analysis.confirmedFacts.length,
+    1,
+    "Vague 'idk' must be ignored and re-asked slot must be deduplicated to 1 confirmed fact",
+  );
+  assert.equal(analysis.questionNumber, 1);
+  assert.equal(
+    analysis.confirmedFacts[0].value,
+    "Independent dental clinics with 2-10 practitioners",
+  );
+});
+
+test("Audit Fix 8: Contradictions clear when resolved by a subsequent user turn", () => {
+  // Unresolved contradiction
+  const unresolved = detectContradictions([
+    "My budget is $0 zero budget",
+    "I will run paid ads and hire an agency",
+  ]);
+  assert.ok(
+    unresolved.contradiction,
+    "Unresolved $0 budget + paid ads must trigger contradiction signal",
+  );
+
+  // Resolved on subsequent turn
+  const resolved = detectContradictions([
+    "My budget is $0 zero budget",
+    "I will run paid ads and hire an agency",
+    "Actually let's use organic community outreach and free channels with no paid ads",
+  ]);
+  assert.equal(
+    resolved.contradiction,
+    undefined,
+    "Contradiction must clear when user pivots to organic/free channels",
+  );
+});
+
+test("Audit Fix 9: ensureAllSevenModels verifies fact values (not just slot labels) and uses XML for Claude", () => {
+  const existingClaude = `<role>You are an expert architect.</role>
+<context>
+  Target Audience: Generic users
+  System overview and baseline architecture notes with over two hundred characters of detailed context so this prompt is treated as a complete block rather than a short snippet.
+</context>
+<goal>Build a B2B analytics portal</goal>`;
+
+  const resolved = ensureAllSevenModels(
+    { claude: existingClaude },
+    {
+      goal: "Build a B2B analytics portal",
+      expertDomain: "website",
+      facts: ["Target Audience: Postpartum mothers returning to exercise"],
+    },
+  );
+
+  assert.ok(
+    resolved.claude.includes("Postpartum mothers returning to exercise"),
+    "Claude prompt must inject the missing fact value even when 'Target Audience' label already existed",
+  );
+  assert.ok(
+    resolved.claude.includes("<confirmed_requirement>"),
+    "Claude prompt must inject missing facts using XML tags rather than raw Markdown headers",
+  );
+});
+
+test("Audit Fix 10: Mid-stream synthesis truncation completes all 7 models and appends deterministic certificate", () => {
+  const messages: UIMessage[] = [
+    {
+      id: "m-1",
+      role: "user",
+      parts: [
+        { type: "text", text: "Build a full-stack task tracker web app" },
+      ],
+    },
+    {
+      id: "m-2",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "**Question 1:** Who is your target audience? <!--slot:audience-->",
+        },
+      ],
+    },
+    {
+      id: "m-3",
+      role: "user",
+      parts: [
+        { type: "text", text: "Remote engineering managers at startups" },
+      ],
+    },
+  ];
+
+  // Simulate a live LLM stream that emitted only the chatgpt block and dropped mid-stream
+  const truncatedStreamText = `Here are your master prompts — engineered individually for each AI model's unique architecture:
+
+\`\`\`chatgpt
+# ROLE & IDENTITY
+Act as a Principal Full-Stack Architect building a task tracker web app for remote engineering managers at startups.
+# CONTEXT & CONSTRAINTS
+Target audience: Remote engineering managers at startups. Budget: $0 free tier. Stack: React, TypeScript, Tailwind CSS, Zod, Supabase.
+\`\`\``;
+
+  const suffix = completeStreamOutputIfNeeded(
+    truncatedStreamText,
+    true,
+    "website",
+    messages,
+    0,
+  );
+
+  const combined = truncatedStreamText + suffix;
+  for (const model of ALL_MODELS) {
+    assert.match(
+      combined,
+      new RegExp(`\`\`\`${model.key}\\b`, "i"),
+      `Completed stream output must contain \`\`\`${model.key} block`,
+    );
+  }
+  assert.match(
+    combined,
+    /<!--certificate[\s\S]*?overall:\s*[0-9]+(?:\.[0-9]+)?[\s\S]*?-->/i,
+    "Completed stream output must include deterministic <!--certificate--> block",
+  );
+
+  // Also verify fallback question numbering advances properly after 1 answered question
+  const nextTurnText = generateAdaptiveConsultantText("website", messages, 0);
+  assert.match(
+    nextTurnText,
+    /\*\*Question 2:\*\*/,
+    "After 1 answered question, generateAdaptiveConsultantText must ask Question 2",
+  );
 });

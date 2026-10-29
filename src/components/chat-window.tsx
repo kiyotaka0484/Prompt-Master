@@ -140,6 +140,7 @@ export interface PromptCertificate {
   assumptions: string[];
   weaknesses?: string[];
   evidence?: string[];
+  executionQualityDisclaimer?: string;
 }
 
 function extractCertificate(
@@ -167,6 +168,7 @@ function extractCertificate(
         assumptions: [],
         weaknesses: evalResult.actionableWeaknesses,
         evidence: evalResult.summaryEvidence.slice(0, 4),
+        executionQualityDisclaimer: evalResult.executionQualityDisclaimer,
       };
     }
     return null;
@@ -180,49 +182,15 @@ function extractCertificate(
     return r ? Number(r[1]) : null;
   };
 
-  // Honest scoring validator: Never blindly trust a self-reported score that inflates
-  // above what the evidence-backed evaluation rules measured.
-  const validateDim = (reported: number | null, evalScore: number): number => {
-    if (reported === null || isNaN(reported) || reported < 0 || reported > 10) {
-      return evalScore;
-    }
-    return Math.min(Number(reported.toFixed(1)), evalScore);
-  };
-
-  const clarity = validateDim(
-    num("clarity"),
-    evalResult.dimensions.clarity.score,
-  );
-  const contextScore = validateDim(
-    num("context"),
-    evalResult.dimensions.context.score,
-  );
-  const constraints = validateDim(
-    num("constraints"),
-    evalResult.dimensions.constraints.score,
-  );
-  const audience = validateDim(
-    num("audience"),
-    evalResult.dimensions.audience.score,
-  );
-  const output = validateDim(
-    num("output"),
-    evalResult.dimensions.outputRequirements.score,
-  );
-  const completeness = validateDim(
-    num("completeness"),
-    evalResult.dimensions.completeness.score,
-  );
-  const feasibility = validateDim(
-    num("feasibility") ?? num("technical_feasibility"),
-    evalResult.dimensions.technicalFeasibility.score,
-  );
-  const specificity = validateDim(
-    num("specificity") ?? num("implementation_specificity"),
-    evalResult.dimensions.implementationSpecificity.score,
-  );
-
-  // Overall score is derived from actual prompt evaluation (zero self-reported inflation)
+  // Deterministic rubric engine (evaluatePromptQuality) is always authoritative
+  const clarity = evalResult.dimensions.clarity.score;
+  const contextScore = evalResult.dimensions.context.score;
+  const constraints = evalResult.dimensions.constraints.score;
+  const audience = evalResult.dimensions.audience.score;
+  const output = evalResult.dimensions.outputRequirements.score;
+  const completeness = evalResult.dimensions.completeness.score;
+  const feasibility = evalResult.dimensions.technicalFeasibility.score;
+  const specificity = evalResult.dimensions.implementationSpecificity.score;
   const overall = evalResult.overallScore;
 
   const revisions = num("revisions") ?? 1;
@@ -259,8 +227,9 @@ function extractCertificate(
     overall,
     revisions: Math.max(1, Math.round(revisions)),
     assumptions,
-    weaknesses: Array.from(new Set(weaknessList)),
+    weaknesses: Array.from(new Set(weaknessList)).slice(0, 3),
     evidence: evalResult.summaryEvidence.slice(0, 4),
+    executionQualityDisclaimer: evalResult.executionQualityDisclaimer,
   };
 }
 
@@ -438,15 +407,30 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
       .find((m) => m.role === "assistant");
     if (!prevAssistant) continue;
     const qTextRaw = messageText(prevAssistant);
-    const userAns = messageText(userMessages[i]);
-    // Skip clarification questions so they do not falsely count as slot answers
-    if (isClarificationOrMetaRequest(userAns)) continue;
-    pairs.push({
+    const userAns = messageText(userMessages[i]).trim();
+    // Skip clarification questions and vague non-answers so they do not falsely count as slot answers
+    if (
+      !userAns ||
+      isClarificationOrMetaRequest(userAns) ||
+      !isSpecificAnswer(userAns)
+    ) {
+      continue;
+    }
+    const slotId = parseSlotTag(qTextRaw);
+    const pairEntry = {
       question: shortQuestion(qTextRaw),
       answer: userAns,
       n: questionNumber(qTextRaw),
-      slot: parseSlotTag(qTextRaw),
-    });
+      slot: slotId,
+    };
+    const existingIdx = slotId
+      ? pairs.findIndex((p) => normalizeSlotId(p.slot) === slotId)
+      : -1;
+    if (existingIdx >= 0) {
+      pairs[existingIdx] = pairEntry;
+    } else {
+      pairs.push(pairEntry);
+    }
   }
 
   // Slot status for the current expert.
@@ -526,8 +510,8 @@ export function ChatWindow({ thread, onPersist, onProgress }: Props) {
     : null;
 
   const primaryPrompt = finalPromptObj
-    ? finalPromptObj.prompts.gemini ||
-      finalPromptObj.prompts.chatgpt ||
+    ? finalPromptObj.prompts.chatgpt ||
+      finalPromptObj.prompts.gemini ||
       Object.values(finalPromptObj.prompts)[0] ||
       lastAssistantText
     : lastAssistantText;
@@ -1548,6 +1532,12 @@ function QualityCertificate({ cert }: { cert: PromptCertificate }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {cert.executionQualityDisclaimer && (
+        <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          {cert.executionQualityDisclaimer}
         </div>
       )}
     </div>

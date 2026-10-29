@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -6,23 +6,56 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  type Auth,
   type User,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import rawConfig from "../../firebase-applet-config.json";
 
-// Initialize Firebase App instance
-export const app =
-  getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Safe API key resolution from client or server environment variables, or config fallback
+const envApiKey =
+  (typeof import.meta !== "undefined" &&
+    import.meta.env?.VITE_FIREBASE_API_KEY) ||
+  (typeof process !== "undefined" &&
+    (process.env?.VITE_FIREBASE_API_KEY || process.env?.FIREBASE_API_KEY)) ||
+  "";
 
-// Initialize Firebase Auth
-export const auth = getAuth(app);
+const resolvedApiKey = (envApiKey || rawConfig.apiKey || "").trim();
 
-// Initialize Firestore with the provisioned database ID
-export const db = getFirestore(
-  app,
-  firebaseConfig.firestoreDatabaseId || "(default)",
+export const isFirebaseConfigured: boolean = Boolean(
+  resolvedApiKey &&
+  resolvedApiKey !== "" &&
+  !resolvedApiKey.includes("YOUR_") &&
+  rawConfig.projectId &&
+  rawConfig.projectId !== "remixed-project-id",
 );
+
+export const firebaseConfig = {
+  ...rawConfig,
+  apiKey: resolvedApiKey,
+};
+
+let appInstance: FirebaseApp | null = null;
+let authInstance: Auth | null = null;
+let dbInstance: Firestore | null = null;
+
+if (isFirebaseConfigured) {
+  try {
+    appInstance =
+      getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    authInstance = getAuth(appInstance);
+    dbInstance = getFirestore(
+      appInstance,
+      firebaseConfig.firestoreDatabaseId || "(default)",
+    );
+  } catch (err) {
+    console.warn("Firebase initialization skipped or failed:", err);
+  }
+}
+
+export const app = appInstance;
+export const auth = authInstance;
+export const db = dbInstance;
 
 // Auth Providers
 export const googleProvider = new GoogleAuthProvider();
@@ -33,17 +66,29 @@ githubProvider.addScope("read:user");
 githubProvider.addScope("user:email");
 
 export async function loginWithGoogle(): Promise<User> {
+  if (!auth) {
+    throw new Error(
+      "Firebase authentication is not configured. Please supply a valid VITE_FIREBASE_API_KEY.",
+    );
+  }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 }
 
 export async function loginWithGithub(): Promise<User> {
+  if (!auth) {
+    throw new Error(
+      "Firebase authentication is not configured. Please supply a valid VITE_FIREBASE_API_KEY.",
+    );
+  }
   const result = await signInWithPopup(auth, githubProvider);
   return result.user;
 }
 
 export async function logoutUser(): Promise<void> {
-  await signOut(auth);
+  if (auth) {
+    await signOut(auth);
+  }
 }
 
 export { onAuthStateChanged, type User };

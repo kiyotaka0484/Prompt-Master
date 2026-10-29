@@ -150,14 +150,16 @@ STEP 1 — INTERNAL REVIEW (silent). Ask yourself:
   • Am I making assumptions that haven't been confirmed?
   • Would a top expert in this domain ask ONE more important question?
 
-STEP 2 — DRAFT + CRITIQUE (silent). Draft the prompt internally, then score it on a 0-10 scale on each of:
-  • Clarity            — is the instruction unambiguous?
-  • Context            — does it carry the user's situation faithfully?
-  • Constraints        — budget, timeline, tools, style limits captured?
-  • Audience Definition — is the target audience explicit?
-  • Output Requirements — format, length, sections, tone specified?
-  • Completeness       — would another expert add anything important?
-Compute OVERALL as the average, rounded to 1 decimal.
+STEP 2 — DRAFT + CRITIQUE (silent). Draft the prompt internally, then score it on a 0-10 scale on each of the 8 rubric dimensions:
+  • Clarity                    — is the instruction unambiguous?
+  • Context                    — does it carry the user's situation faithfully?
+  • Constraints                — budget, timeline, tools, style limits captured?
+  • Audience Definition        — is the target audience explicit?
+  • Output Requirements        — format, length, sections, tone specified?
+  • Completeness               — would another expert add anything important?
+  • Technical Feasibility      — are architecture, resource limits, and operational assumptions realistic?
+  • Implementation Specificity — are concrete workflows, tools, edge cases, and acceptance criteria specified?
+Compute OVERALL as the weighted rubric score, rounded to 1 decimal.
 
 STEP 3 — IMPROVEMENT PASS (silent). If OVERALL < 9.5, REVISE the prompt: sharper role definition, richer context, tighter constraints, clearer output spec, concrete examples, explicit success criteria. Re-score. Repeat up to 3 revision passes until OVERALL >= 9.5 OR you've revised 3 times. Count your revisions.
 
@@ -953,7 +955,10 @@ export function detectExpert(text: string): ExpertId | null {
       best = k;
     }
   }
-  // Require either a keyword hit OR a reasonably long sentence to commit.
-  if (bestScore === 0 && t.split(/\s+/).length < 4) return null;
-  return bestScore === 0 ? null : best;
+  // Require either a keyword hit OR a substantive non-vague sentence to commit.
+  if (bestScore === 0) {
+    if (t.split(/\s+/).length < 4 || isVagueIntent(t)) return null;
+    return best;
+  }
+  return best;
 }
