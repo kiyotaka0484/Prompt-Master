@@ -41,8 +41,6 @@ interface AuthContextType {
   isFirebaseConfigured: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const THEME_STORAGE_KEY = "prompt-master.theme.v1";
 
 function applyThemeToDom(theme: ThemePreference) {
@@ -57,7 +55,58 @@ function applyThemeToDom(theme: ThemePreference) {
   }
 }
 
+const DEFAULT_AUTH_CONTEXT: AuthContextType = {
+  user: null,
+  profile: null,
+  loading: false,
+  theme: "dark",
+  setTheme: async (newTheme: ThemePreference) => {
+    applyThemeToDom(newTheme);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    }
+  },
+  toggleTheme: async () => {
+    if (typeof window === "undefined") return;
+    const current = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const next: ThemePreference = current === "light" ? "dark" : "light";
+    applyThemeToDom(next);
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
+  },
+  loginWithGoogle: async () => {
+    toast.error(
+      "Cloud authentication is not configured. Set VITE_FIREBASE_API_KEY in your environment to enable sync.",
+    );
+  },
+  loginWithGithub: async () => {
+    toast.error(
+      "Cloud authentication is not configured. Set VITE_FIREBASE_API_KEY in your environment to enable sync.",
+    );
+  },
+  logout: async () => {},
+  syncLocalData: async () => {
+    toast.info("Please sign in to sync your interview sessions to the cloud.");
+  },
+  isCloudSynced: false,
+  isFirebaseConfigured,
+};
+
+// Persist context instance on globalThis so Vite HMR / SSR module reloads never split Provider and Consumer identity
+const GLOBAL_AUTH_CTX_KEY = "__PROMPT_MASTER_AUTH_CONTEXT__";
+const globalStore = globalThis as typeof globalThis & {
+  [GLOBAL_AUTH_CTX_KEY]?: ReturnType<
+    typeof createContext<AuthContextType | undefined>
+  >;
+};
+
+const AuthContext =
+  globalStore[GLOBAL_AUTH_CTX_KEY] ??
+  (globalStore[GLOBAL_AUTH_CTX_KEY] = createContext<
+    AuthContextType | undefined
+  >(undefined));
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const existingContext = useContext(AuthContext);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize theme from storage
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (existingContext || typeof window === "undefined") return;
     const stored = window.localStorage.getItem(
       THEME_STORAGE_KEY,
     ) as ThemePreference | null;
@@ -78,10 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setThemeState(initialTheme);
     themeRef.current = initialTheme;
     applyThemeToDom(initialTheme);
-  }, []);
+  }, [existingContext]);
 
   // Listen to Firebase Auth state
   useEffect(() => {
+    if (existingContext) return;
     if (!auth) {
       setLoading(false);
       return;
@@ -112,7 +162,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [existingContext]);
+
+  // If already wrapped by a parent AuthProvider, avoid duplicate listeners
+  if (existingContext) {
+    return <>{children}</>;
+  }
 
   const setTheme = async (newTheme: ThemePreference) => {
     setThemeState(newTheme);
@@ -252,8 +307,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  return context ?? DEFAULT_AUTH_CONTEXT;
 }

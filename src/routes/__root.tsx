@@ -173,7 +173,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body suppressHydrationWarning>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <Scripts />
       </body>
     </html>
